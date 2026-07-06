@@ -1,0 +1,16 @@
+{
+  "name": "親方の味方",
+  "short_name": "親方の味方",
+  "description": "効率重視のAI事務アシスタント",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7fbff",
+  "theme_color": "#0f67b1",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
