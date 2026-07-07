@@ -118,10 +118,10 @@ function authErrorMessage(message: string) {
 
 function Field({ label, name, type = "text", required, defaultValue, placeholder }: { label: string; name: string; type?: string; required?: boolean; defaultValue?: string | number; placeholder?: string }) {
   return (
-    <label className="grid gap-1 text-sm font-semibold text-ink">
+    <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
       {label}
       <input
-        className="tap rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+        className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
         name={name}
         type={type}
         required={required}
@@ -134,9 +134,9 @@ function Field({ label, name, type = "text", required, defaultValue, placeholder
 
 function SelectField({ label, name, children, defaultValue }: { label: string; name: string; children: React.ReactNode; defaultValue?: string }) {
   return (
-    <label className="grid gap-1 text-sm font-semibold text-ink">
+    <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
       {label}
-      <select name={name} defaultValue={defaultValue} className="tap rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft">
+      <select name={name} defaultValue={defaultValue} className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft">
         {children}
       </select>
     </label>
@@ -145,15 +145,15 @@ function SelectField({ label, name, children, defaultValue }: { label: string; n
 
 function TextArea({ label, name, defaultValue }: { label: string; name: string; defaultValue?: string }) {
   return (
-    <label className="grid gap-1 text-sm font-semibold text-ink">
+    <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
       {label}
-      <textarea name={name} defaultValue={defaultValue} rows={3} className="rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
+      <textarea name={name} defaultValue={defaultValue} rows={3} className="min-h-24 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
     </label>
   );
 }
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <section className={`mx-auto w-full rounded-lg border border-line bg-white p-4 shadow-soft ${className}`}>{children}</section>;
+  return <section className={`mx-auto min-w-0 w-full max-w-full rounded-lg border border-line bg-white p-4 shadow-soft ${className}`}>{children}</section>;
 }
 
 function SectionTitle({ icon, title, sub }: { icon: React.ReactNode; title: string; sub?: string }) {
@@ -764,7 +764,7 @@ export default function App() {
         </div>
         <Card>
           <div className="grid gap-3">
-            <label className="grid gap-1 text-sm font-semibold text-ink">
+            <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
               新しいパスワード
               <input className="tap rounded-lg border border-line bg-white px-4 py-3 text-base" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
             </label>
@@ -788,11 +788,11 @@ export default function App() {
         </div>
         <Card>
           <div className="grid gap-3">
-            <label className="grid gap-1 text-sm font-semibold text-ink">
+            <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
               メール
               <input className="tap rounded-lg border border-line bg-white px-4 py-3 text-base" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </label>
-            <label className="grid gap-1 text-sm font-semibold text-ink">
+            <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
               パスワード
               <input className="tap rounded-lg border border-line bg-white px-4 py-3 text-base" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </label>
@@ -828,13 +828,13 @@ export default function App() {
   ];
 
   const scheduleForm = (className = "") => (
-    <div className={`rounded-lg border border-line bg-white p-3 ${className}`}>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
+    <div className={`rounded-lg border border-line bg-white p-4 ${className}`}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-sm font-bold text-genba">予定の追加</p>
-          <p className="text-xs text-slate-600">先に予定を入れて、当日は日報だけにします</p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">先に予定を入れて、当日は日報だけにします</p>
         </div>
-        <span className="rounded-lg bg-skysoft px-2 py-1 text-xs font-bold text-genba">{selectedCalendarDate}</span>
+        <span className="shrink-0 rounded-lg bg-skysoft px-3 py-2 text-xs font-bold text-genba">{selectedCalendarDate}</span>
       </div>
       <form key={selectedCalendarDate} className="grid gap-3" onSubmit={async (e) => {
         e.preventDefault();
@@ -857,7 +857,7 @@ export default function App() {
   );
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-md bg-[#f7fbff] px-4 pb-28 pt-4">
+    <main className="mx-auto min-h-screen w-full max-w-md overflow-x-hidden bg-[#f7fbff] px-4 pb-28 pt-4">
       <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-line bg-[#f7fbff]/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center justify-between">
           <div>
@@ -974,9 +974,9 @@ export default function App() {
               <SiteSelect sites={sites} defaultValue={activeWorkLog?.siteId || activeWorkSchedule?.siteId} />
               <Field label="作業員・応援者" name="workers" defaultValue={activeWorkLog?.workers || activeWorkSchedule?.workers || workerLabel} placeholder="例：自分、佐藤さん、田中さん" />
               <TextArea label="今日やったこと" name="memo" defaultValue={activeWorkLog?.memo || activeWorkSchedule?.workDescription || ""} />
-              <label className="grid gap-1 text-sm font-semibold text-ink">
+              <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
                 現場写真
-                <input name="photos" type="file" accept="image/*" multiple className="tap rounded-lg border border-line bg-white px-4 py-3 text-base" />
+                <input name="photos" type="file" accept="image/*" multiple className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base" />
               </label>
               <div className="grid gap-2 rounded-lg border border-line bg-white p-3">
                 <p className="text-sm font-bold text-genba">今日の片付け</p>
@@ -1020,20 +1020,20 @@ export default function App() {
           {calendarAddFocus ? scheduleForm() : null}
           <Card>
             <SectionTitle icon={<CalendarDays />} title="予定カレンダー" sub="現場・期限・領収書をまとめて見ます" />
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <button type="button" onClick={() => setCalendarMonth(addMonths(calendarMonth, -1))} className="tap grid h-11 w-11 place-items-center rounded-lg border border-line bg-white text-genba" aria-label="前の月">
+            <div className="mb-4 flex items-center justify-between gap-2 rounded-lg bg-skysoft p-2">
+              <button type="button" onClick={() => setCalendarMonth(addMonths(calendarMonth, -1))} className="tap grid h-12 w-12 place-items-center rounded-lg border border-line bg-white text-genba" aria-label="前の月">
                 <ChevronLeft />
               </button>
-              <div className="text-center">
-                <p className="text-2xl font-black">{calendarMonth.replace("-", "年")}月</p>
-                <button type="button" onClick={() => { setCalendarMonth(monthInput()); setSelectedCalendarDate(today); }} className="mt-1 text-xs font-bold text-genba">今日に戻る</button>
+              <div className="min-w-0 text-center">
+                <p className="text-xl font-black">{calendarMonth.replace("-", "年")}月</p>
+                <button type="button" onClick={() => { setCalendarMonth(monthInput()); setSelectedCalendarDate(today); }} className="mt-1 rounded-lg bg-white px-3 py-1 text-xs font-bold text-genba">今日に戻る</button>
               </div>
-              <button type="button" onClick={() => setCalendarMonth(addMonths(calendarMonth, 1))} className="tap grid h-11 w-11 place-items-center rounded-lg border border-line bg-white text-genba" aria-label="次の月">
+              <button type="button" onClick={() => setCalendarMonth(addMonths(calendarMonth, 1))} className="tap grid h-12 w-12 place-items-center rounded-lg border border-line bg-white text-genba" aria-label="次の月">
                 <ChevronRight />
               </button>
             </div>
             <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-500">
-              {weekdayLabels.map((label) => <div key={label} className={label === "日" ? "text-red-500" : label === "土" ? "text-blue-600" : ""}>{label}</div>)}
+              {weekdayLabels.map((label) => <div key={label} className={`py-1 ${label === "日" ? "text-red-500" : label === "土" ? "text-blue-600" : ""}`}>{label}</div>)}
             </div>
             <div className="mt-1 grid grid-cols-7 gap-1">
               {calendarCells(calendarMonth).map((date) => {
@@ -1046,7 +1046,7 @@ export default function App() {
                     key={date}
                     type="button"
                     onClick={() => setSelectedCalendarDate(date)}
-                    className={`min-h-16 rounded-lg border p-1 text-left ${isSelected ? "border-genba bg-skysoft" : "border-line bg-white"} ${isOtherMonth ? "opacity-40" : ""}`}
+                    className={`tap min-h-16 rounded-lg border p-1 text-left ${isSelected ? "border-genba bg-skysoft shadow-soft" : "border-line bg-white"} ${isOtherMonth ? "opacity-40" : ""}`}
                   >
                     <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-black ${isToday ? "bg-genba text-white" : "text-ink"}`}>{Number(date.slice(-2))}</span>
                     <div className="mt-1 flex flex-wrap gap-1">
@@ -1062,37 +1062,41 @@ export default function App() {
           </Card>
 
           <Card>
-            <div className="mb-3 flex items-center justify-between">
-              <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
                 <p className="text-sm font-bold text-genba">選んだ日の予定</p>
                 <h2 className="text-xl font-black">{selectedCalendarDate}</h2>
               </div>
-              <p className="rounded-lg bg-skysoft px-3 py-2 text-sm font-bold text-genba">{selectedCalendarItems.length}件</p>
+              <p className="shrink-0 rounded-lg bg-skysoft px-3 py-2 text-sm font-bold text-genba">{selectedCalendarItems.length}件</p>
             </div>
             {selectedDateSchedules.length ? (
-              <div className="mb-3 grid gap-2">
+              <div className="mb-3 grid gap-3">
                 {selectedDateSchedules.map((schedule) => (
-                  <div key={schedule.id} className="rounded-lg border border-cyan-200 bg-cyan-50 p-3">
-                    <span className={`rounded-lg px-2 py-1 text-xs font-bold ${calendarKindClass("予定")}`}>予定</span>
-                    <p className="mt-2 font-black">{schedule.siteName}</p>
-                    <p className="text-sm text-slate-600">{schedule.workDescription} / {schedule.workers || "作業員未入力"}</p>
-                    <p className="mt-1 text-sm font-bold text-ink">{yen.format((schedule.laborCount || 1) * (schedule.dailyRate || 0))}</p>
-                    <div className="mt-3 grid grid-cols-3 gap-2">
-                      <button type="button" onClick={() => { setWorkLogDate(schedule.date); setTab("todayWork"); }} className="tap rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">日報を書く</button>
-                      <button type="button" onClick={() => createInvoiceFromSchedule(schedule)} className="tap rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">{schedule.invoiceId ? "請求書を再作成" : "請求書に回す"}</button>
-                      <button type="button" onClick={() => deleteCalendarSchedule(schedule.id)} className="tap rounded-lg border border-red-200 bg-white px-3 py-3 text-sm font-bold text-red-700">削除</button>
+                  <div key={schedule.id} className="rounded-lg border border-cyan-200 bg-cyan-50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className={`rounded-lg px-2 py-1 text-xs font-bold ${calendarKindClass("予定")}`}>予定</span>
+                        <p className="mt-2 break-words text-lg font-black">{schedule.siteName || "現場未入力"}</p>
+                        <p className="mt-1 break-words text-sm leading-6 text-slate-600">{schedule.workDescription} / {schedule.workers || "作業員未入力"}</p>
+                      </div>
+                      <p className="shrink-0 rounded-lg bg-white px-3 py-2 text-sm font-black text-genba">{yen.format((schedule.laborCount || 1) * (schedule.dailyRate || 0))}</p>
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <button type="button" onClick={() => { setWorkLogDate(schedule.date); setTab("todayWork"); }} className="tap min-h-12 rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">日報を書く</button>
+                      <button type="button" onClick={() => createInvoiceFromSchedule(schedule)} className="tap min-h-12 rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">{schedule.invoiceId ? "請求書を再作成" : "請求書に回す"}</button>
+                      <button type="button" onClick={() => deleteCalendarSchedule(schedule.id)} className="tap min-h-12 rounded-lg border border-red-200 bg-white px-3 py-3 text-sm font-bold text-red-700">削除</button>
                     </div>
                   </div>
                 ))}
               </div>
             ) : null}
             {selectedOtherCalendarItems.length ? (
-              <div className="grid gap-2">
+              <div className="grid gap-3">
                 {selectedOtherCalendarItems.map((item, index) => (
-                  <div key={`${item.date}-${item.title}-${index}`} className="rounded-lg border border-line bg-white p-3">
+                  <div key={`${item.date}-${item.title}-${index}`} className="rounded-lg border border-line bg-white p-4">
                     <span className={`rounded-lg px-2 py-1 text-xs font-bold ${calendarKindClass(item.kind)}`}>{item.kind}</span>
                     <p className="mt-2 font-black">{item.title}</p>
-                    <p className="text-sm text-slate-600">{item.sub}</p>
+                    <p className="break-words text-sm leading-6 text-slate-600">{item.sub}</p>
                   </div>
                 ))}
               </div>
@@ -1190,7 +1194,7 @@ export default function App() {
 
       {tab === "receipts" && (
         <CrudSection title="領収書管理" icon={<Camera />} sub="撮る、確認する、経費にする">
-          <form key={editingReceipt?.id ?? "new-receipt"} className="grid gap-3" onSubmit={async (e) => {
+          <form key={editingReceipt?.id ?? "new-receipt"} className="grid gap-4" onSubmit={async (e) => {
             e.preventDefault();
             const fd = new FormData(e.currentTarget);
             const imageFile = (fd.get("image") as File) || null;
@@ -1242,28 +1246,28 @@ export default function App() {
             <FileInput label={editingReceipt ? "領収書写真（変更する時だけ選択）" : "領収書写真"} name="image" />
             <input type="hidden" name="ocrCompleted" defaultValue={editingReceipt?.ocrStatus === "完了" ? "1" : ""} />
             {editingReceipt ? (
-              <div className="rounded-lg border border-genba bg-skysoft p-3">
+              <div className="rounded-lg border border-genba bg-skysoft p-4">
                 <p className="text-sm font-black text-genba">編集中の領収書</p>
                 <p className="mt-1 text-sm text-slate-700">{editingReceipt.date || "日付なし"} / {editingReceipt.storeName || "店名なし"} / {yen.format(editingReceipt.amount || 0)}</p>
               </div>
             ) : null}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {editingReceipt ? (
-                <button type="button" onClick={resetReceiptForm} className="tap rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">新規入力に戻る</button>
+                <button type="button" onClick={resetReceiptForm} className="tap min-h-12 rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">新規入力に戻る</button>
               ) : (
-                <button type="button" onClick={(e) => quickSaveReceiptPhoto(e.currentTarget.form)} className="tap rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">写真だけ先に保存</button>
+                <button type="button" onClick={(e) => quickSaveReceiptPhoto(e.currentTarget.form)} className="tap min-h-12 rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">写真だけ先に保存</button>
               )}
-              <button type="button" onClick={(e) => readReceiptPhoto(e.currentTarget.form)} className="tap rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">写真から読み取る</button>
-              <button type="button" onClick={() => { setReceiptConfirmVisible(true); setReceiptOcrStatus("空欄に入力して保存できます"); }} className="tap rounded-lg border border-line bg-white px-3 py-3 text-sm font-bold text-slate-700">手入力で確認</button>
+              <button type="button" onClick={(e) => readReceiptPhoto(e.currentTarget.form)} className="tap min-h-12 rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">写真から読み取る</button>
+              <button type="button" onClick={() => { setReceiptConfirmVisible(true); setReceiptOcrStatus("空欄に入力して保存できます"); }} className="tap min-h-12 rounded-lg border border-line bg-white px-3 py-3 text-sm font-bold text-slate-700">手入力で確認</button>
             </div>
-            <p className="rounded-lg bg-skysoft p-3 text-sm leading-6 text-slate-700">{receiptOcrStatus}</p>
-            <div className={receiptConfirmVisible ? "grid gap-3 rounded-lg border border-genba bg-white p-3" : "hidden"}>
+            <p className="rounded-lg bg-skysoft p-4 text-sm font-semibold leading-6 text-slate-700">{receiptOcrStatus}</p>
+            <div className={receiptConfirmVisible ? "grid gap-3 rounded-lg border border-genba bg-white p-4" : "hidden"}>
               <div>
                 <p className="text-sm font-black text-genba">確認して保存</p>
                 <p className="mt-1 text-xs leading-5 text-slate-600">読み取れたところだけ入っています。違うところはここで直してください。</p>
               </div>
               {receiptOcrFields ? (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {[
                   ["店舗名 / 支払先", receiptOcrFields.storeName || "空欄"],
                   ["日付", receiptOcrFields.date || "確認してください"],
@@ -1308,7 +1312,7 @@ export default function App() {
               ["unprocessed", "まだ"],
               ["processed", "済み"]
             ].map(([id, label]) => (
-              <button key={id} type="button" onClick={() => setReceiptFilter(id as typeof receiptFilter)} className={`tap rounded-lg px-3 py-2 text-sm font-bold ${receiptFilter === id ? "bg-genba text-white" : "border border-line bg-white text-genba"}`}>{label}</button>
+              <button key={id} type="button" onClick={() => setReceiptFilter(id as typeof receiptFilter)} className={`tap min-h-11 rounded-lg px-3 py-2 text-sm font-bold ${receiptFilter === id ? "bg-genba text-white" : "border border-line bg-white text-genba"}`}>{label}</button>
             ))}
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -1321,24 +1325,29 @@ export default function App() {
               <p className="text-lg font-black">{unprocessedReceipts.length}枚</p>
             </div>
           </div>
-          <button onClick={() => downloadPdf("領収書一覧", receipts.map((r) => [r.storeName || "店名なし", `${r.date} / ${yen.format(r.amount)} / ${receiptStatusLabel(r.status)}`]))} className="tap mt-3 w-full rounded-lg bg-skysoft font-bold text-genba">領収書一覧PDF</button>
+          <button onClick={() => downloadPdf("領収書一覧", receipts.map((r) => [r.storeName || "店名なし", `${r.date} / ${yen.format(r.amount)} / ${receiptStatusLabel(r.status)}`]))} className="tap mt-3 min-h-12 w-full rounded-lg bg-skysoft font-bold text-genba">領収書一覧PDF</button>
           {filteredReceipts.length === 0 ? (
             <p className="mt-4 rounded-lg bg-skysoft p-4 text-center text-sm text-slate-600">まだ登録がありません</p>
           ) : (
-            <div className="mt-4 grid gap-2">
+            <div className="mt-4 grid gap-3">
               {filteredReceipts.map((receipt) => (
-                <div key={receipt.id} className={`rounded-lg border p-3 ${editingReceiptId === receipt.id ? "border-genba bg-skysoft" : "border-line bg-white"}`}>
+                <div key={receipt.id} className={`rounded-lg border p-4 ${editingReceiptId === receipt.id ? "border-genba bg-skysoft" : "border-line bg-white"}`}>
                   <div className="flex gap-3">
-                    {receipt.imageUrl ? <img src={receipt.imageUrl} alt="" className="h-16 w-16 rounded-lg object-cover" /> : <div className="grid h-16 w-16 place-items-center rounded-lg bg-skysoft text-genba"><Camera /></div>}
-                    <div className="min-w-0">
-                      <p className="break-words font-bold">{receipt.storeName || "領収書"}</p>
-                      <p className="text-sm text-slate-600">{receipt.date || "日付なし"} / {yen.format(receipt.amount)} / {receiptStatusLabel(receipt.status)} / {receipt.purpose || "用途未入力"}</p>
+                    {receipt.imageUrl ? <img src={receipt.imageUrl} alt="" className="h-20 w-20 shrink-0 rounded-lg object-cover" /> : <div className="grid h-20 w-20 shrink-0 place-items-center rounded-lg bg-skysoft text-genba"><Camera /></div>}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-lg px-2 py-1 text-xs font-bold ${receipt.status === "未処理" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{receiptStatusLabel(receipt.status)}</span>
+                        <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{receipt.purpose || "用途未入力"}</span>
+                      </div>
+                      <p className="mt-2 break-words font-black">{receipt.storeName || "領収書"}</p>
+                      <p className="mt-1 text-sm text-slate-600">{receipt.date || "日付なし"}</p>
+                      <p className="mt-1 text-xl font-black text-genba">{yen.format(receipt.amount)}</p>
                     </div>
                   </div>
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    <button type="button" onClick={() => startReceiptEdit(receipt)} className="tap rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">編集</button>
-                    <button type="button" onClick={() => toggleReceiptStatus(receipt)} className="tap rounded-lg bg-skysoft px-3 py-3 text-sm font-bold text-genba">{receipt.status === "未処理" ? "処理済み" : "未処理へ"}</button>
-                    <button type="button" onClick={() => deleteReceipt(receipt.id)} className="tap rounded-lg border border-red-200 bg-white px-3 py-3 text-sm font-bold text-red-700">削除</button>
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <button type="button" onClick={() => startReceiptEdit(receipt)} className="tap min-h-12 rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">編集</button>
+                    <button type="button" onClick={() => toggleReceiptStatus(receipt)} className="tap min-h-12 rounded-lg bg-skysoft px-3 py-3 text-sm font-bold text-genba">{receipt.status === "未処理" ? "処理済み" : "未処理へ"}</button>
+                    <button type="button" onClick={() => deleteReceipt(receipt.id)} className="tap min-h-12 rounded-lg border border-red-200 bg-white px-3 py-3 text-sm font-bold text-red-700">削除</button>
                   </div>
                 </div>
               ))}
@@ -1505,7 +1514,7 @@ export default function App() {
 }
 
 function SaveButton({ label = "保存する" }: { label?: string }) {
-  return <button className="tap rounded-lg bg-genba px-4 py-3 text-lg font-bold text-white" type="submit"><CheckCircle2 className="mr-2 inline" size={20} />{label}</button>;
+  return <button className="tap min-h-[52px] w-full rounded-lg bg-genba px-4 py-3 text-lg font-bold text-white shadow-soft" type="submit"><CheckCircle2 className="mr-2 inline" size={20} />{label}</button>;
 }
 
 function FileInput({ label, name }: { label: string; name: string }) {
@@ -1521,11 +1530,14 @@ function FileInput({ label, name }: { label: string; name: string }) {
   }, []);
 
   return (
-    <label className="grid gap-1 text-sm font-semibold text-ink">
+    <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
       {label}
-      <span className="tap flex w-full items-center justify-center gap-3 rounded-lg border border-line bg-white px-3 py-3 text-sm text-slate-600">
-        <span className="shrink-0 rounded-full bg-slate-100 px-4 py-2 font-bold text-ink">ファイルを選択</span>
-        <span className="min-w-0 truncate font-semibold">{fileName}</span>
+      <span className="tap grid min-h-24 w-full place-items-center rounded-lg border-2 border-dashed border-line bg-white px-4 py-4 text-center text-sm text-slate-600">
+        <span className="grid gap-2">
+          <span className="mx-auto grid h-11 w-11 place-items-center rounded-lg bg-skysoft text-genba"><Camera size={22} /></span>
+          <span className="font-black text-ink">写真・アルバムから選択</span>
+          <span className="min-w-0 max-w-full truncate text-xs font-semibold text-slate-500">{fileName}</span>
+        </span>
       </span>
       <input
         ref={inputRef}
@@ -1550,10 +1562,10 @@ function SiteSelect({ sites, defaultValue = "" }: { sites: Site[]; defaultValue?
 
 function SiteNameField({ sites }: { sites: Site[] }) {
   return (
-    <label className="grid gap-1 text-sm font-semibold text-ink">
+    <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
       現場
       <input
-        className="tap rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+        className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
         name="siteName"
         list="money-site-options"
         placeholder="例：渋谷マンション改修"
@@ -1682,7 +1694,7 @@ function MoneySection({
 
   return (
     <CrudSection title={isInvoice ? "請求書作成" : "見積書作成"} icon={isInvoice ? <FileText /> : <ClipboardList />} sub="金額は自動計算します">
-      <form className="grid gap-3" onSubmit={async (e) => {
+      <form className="grid gap-4" onSubmit={async (e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         const rawTaxRate = fd.get("taxRate");
@@ -1753,10 +1765,10 @@ function MoneySection({
         }
         e.currentTarget.reset();
       }}>
-        <label className="grid gap-1 text-sm font-semibold text-ink">
+        <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
           {isInvoice ? "請求先会社名" : "見積先会社名"}
           <input
-            className="tap rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+            className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
             name="clientCompany"
             list={`${type}-client-options`}
             required
@@ -1777,13 +1789,13 @@ function MoneySection({
             <Field label="作業日" name="workDate" type="date" defaultValue={today} />
             <Field label="支払条件" name="paymentTerms" defaultValue="月末締め翌月末払い" />
             <Field label="支払期日" name="dueDate" type="date" />
-            <div className="grid gap-3 rounded-lg border border-line bg-white p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
+            <div className="grid gap-3 rounded-lg border border-line bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
                   <p className="text-sm font-black text-genba">請求明細</p>
-                  <p className="mt-1 text-xs text-slate-600">数量×単価で計算できます。金額は直接修正もできます。</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">数量×単価で計算できます。現場都合の端数は金額欄で直接直せます。</p>
                 </div>
-                <span className="shrink-0 rounded-lg bg-skysoft px-2 py-1 text-xs font-bold text-genba">{invoiceDraftLineItems.length}/{MAX_INVOICE_LINE_ITEMS}</span>
+                <span className="shrink-0 rounded-lg bg-skysoft px-3 py-2 text-xs font-bold text-genba">{invoiceDraftLineItems.length}/{MAX_INVOICE_LINE_ITEMS}</span>
               </div>
               <datalist id="invoice-line-category-options">
                 {INVOICE_LINE_ITEM_CATEGORIES.map((category) => <option key={category} value={category} />)}
@@ -1793,49 +1805,52 @@ function MoneySection({
               </datalist>
               <div className="grid gap-3">
                 {invoiceDraftLineItems.map((lineItem, index) => (
-                  <div key={lineItem.id} className="grid gap-2 rounded-lg bg-skysoft p-3">
+                  <div key={lineItem.id} className="grid gap-3 rounded-lg border border-line bg-skysoft p-3">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-black text-ink">明細 {index + 1}</p>
+                      <p className="shrink-0 rounded-lg bg-white px-3 py-1 text-sm font-black text-genba">{yen.format(lineItem.amount || 0)}</p>
                       {index >= MIN_INVOICE_LINE_ITEMS ? (
                         <button type="button" onClick={() => removeInvoiceDraftLineItem(lineItem.id, index)} className="tap min-h-0 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700">削除</button>
                       ) : null}
                     </div>
-                    <label className="grid gap-1 text-xs font-bold text-ink">
-                      名目
-                      <input value={lineItem.category} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { category: e.currentTarget.value })} list="invoice-line-category-options" className="tap rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" placeholder="例：人工代" />
-                    </label>
-                    <label className="grid gap-1 text-xs font-bold text-ink">
-                      内容
-                      <input value={lineItem.description} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { description: e.currentTarget.value })} className="tap rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" placeholder="例：配線工事、器具付け" />
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="grid gap-1 text-xs font-bold text-ink">
-                        数量
-                        <input value={lineItem.quantity ?? ""} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { quantity: nullableInputNumber(e.currentTarget.value) }, true)} type="number" step="0.01" className="tap min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
+                    <div className="grid gap-2">
+                      <label className="grid min-w-0 gap-1 text-xs font-bold text-ink">
+                        名目
+                        <input value={lineItem.category} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { category: e.currentTarget.value })} list="invoice-line-category-options" className="tap min-h-12 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" placeholder="例：人工代" />
                       </label>
-                      <label className="grid gap-1 text-xs font-bold text-ink">
+                      <label className="grid min-w-0 gap-1 text-xs font-bold text-ink">
+                        内容
+                        <input value={lineItem.description} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { description: e.currentTarget.value })} className="tap min-h-12 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" placeholder="例：配線工事、器具付け" />
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-2">
+                      <label className="grid min-w-0 gap-1 text-xs font-bold text-ink">
+                        数量
+                        <input value={lineItem.quantity ?? ""} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { quantity: nullableInputNumber(e.currentTarget.value) }, true)} type="number" step="0.01" className="tap min-h-12 min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
+                      </label>
+                      <label className="grid min-w-0 gap-1 text-xs font-bold text-ink">
                         単位
-                        <input value={lineItem.unit} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { unit: e.currentTarget.value })} list="invoice-line-unit-options" className="tap min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
+                        <input value={lineItem.unit} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { unit: e.currentTarget.value })} list="invoice-line-unit-options" className="tap min-h-12 min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
                       </label>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <label className="grid gap-1 text-xs font-bold text-ink">
+                      <label className="grid min-w-0 gap-1 text-xs font-bold text-ink">
                         単価
-                        <input value={lineItem.unitPrice ?? ""} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { unitPrice: nullableInputNumber(e.currentTarget.value) }, true)} type="number" className="tap min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
+                        <input value={lineItem.unitPrice ?? ""} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { unitPrice: nullableInputNumber(e.currentTarget.value) }, true)} type="number" className="tap min-h-12 min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
                       </label>
-                      <label className="grid gap-1 text-xs font-bold text-ink">
+                      <label className="grid min-w-0 gap-1 text-xs font-bold text-ink">
                         金額
-                        <input value={lineItem.amount || ""} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { amount: num(e.currentTarget.value) })} type="number" className="tap min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-base font-bold outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
+                        <input value={lineItem.amount || ""} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { amount: num(e.currentTarget.value) })} type="number" className="tap min-h-12 min-w-0 rounded-lg border border-genba bg-white px-3 py-2 text-base font-black text-genba outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
                       </label>
                     </div>
                   </div>
                 ))}
               </div>
-              <button type="button" disabled={invoiceDraftLineItems.length >= MAX_INVOICE_LINE_ITEMS} onClick={addInvoiceDraftLineItem} className="tap rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba disabled:border-line disabled:text-slate-400">+ 明細を追加</button>
-              <div className="grid gap-2 rounded-lg border border-line bg-white p-3">
-                <div className="flex items-center justify-between text-sm"><span className="text-slate-600">小計</span><strong>{yen.format(invoiceDraftTotals.subtotal)}</strong></div>
-                <div className="flex items-center justify-between text-sm"><span className="text-slate-600">消費税</span><strong>{yen.format(invoiceDraftTotals.taxAmount)}</strong></div>
-                <div className="flex items-center justify-between border-t border-line pt-2 text-base"><span className="font-bold text-ink">合計</span><strong className="text-xl text-genba">{yen.format(invoiceDraftTotals.totalAmount)}</strong></div>
+              <button type="button" disabled={invoiceDraftLineItems.length >= MAX_INVOICE_LINE_ITEMS} onClick={addInvoiceDraftLineItem} className="tap min-h-12 rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba disabled:border-line disabled:text-slate-400">+ 明細を追加</button>
+              <div className="grid gap-2 rounded-lg bg-genba p-4 text-white">
+                <div className="flex items-center justify-between text-sm"><span className="text-white/75">小計</span><strong>{yen.format(invoiceDraftTotals.subtotal)}</strong></div>
+                <div className="flex items-center justify-between text-sm"><span className="text-white/75">消費税</span><strong>{yen.format(invoiceDraftTotals.taxAmount)}</strong></div>
+                <div className="flex items-center justify-between border-t border-white/20 pt-3 text-base"><span className="font-bold text-white">税込合計</span><strong className="text-2xl text-white">{yen.format(invoiceDraftTotals.totalAmount)}</strong></div>
               </div>
             </div>
           </>
@@ -1852,19 +1867,28 @@ function MoneySection({
         )}
         <TextArea label="備考" name="notes" />
         {isInvoice ? (
-          <label className="grid gap-1 text-sm font-semibold text-ink">
+          <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
             消費税率
-            <select name="taxRate" value={invoiceTaxRate} onChange={(e) => setInvoiceTaxRate(Number(e.currentTarget.value))} className="tap rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft">
+            <select name="taxRate" value={invoiceTaxRate} onChange={(e) => setInvoiceTaxRate(Number(e.currentTarget.value))} className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft">
               <option value="10">10%</option><option value="8">8%</option><option value="0">0%</option>
             </select>
           </label>
         ) : (
           <SelectField label="消費税率" name="taxRate"><option value="10">10%</option><option value="8">8%</option><option value="0">0%</option></SelectField>
         )}
+        {isInvoice ? (
+          <div className="rounded-lg border border-genba bg-white p-4">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-bold text-slate-600">今回の税込合計</span>
+              <strong className="shrink-0 text-2xl font-black text-genba">{yen.format(invoiceDraftTotals.totalAmount)}</strong>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-slate-500">保存すると、この金額が請求書一覧と入金済み売上に使われます。</p>
+          </div>
+        ) : null}
         <p className="rounded-lg bg-skysoft p-3 text-sm text-slate-700">振込先：{profile.bankName || "プロフィール登録後に自動反映"}</p>
         <SaveButton label={isInvoice ? "請求書を作る" : "見積書を作る"} />
       </form>
-      <div className="mt-4 grid gap-2">
+      <div className="mt-4 grid gap-3">
         {items.map((item: any) => {
           const siteLabel = item.siteName || sites.find((site) => site.id === item.siteId)?.siteName || "現場未入力";
           const bankInfo = [profile.bankName, profile.bankBranch, profile.bankType, profile.bankAccountNumber, profile.bankAccountName].filter(Boolean).join(" ");
@@ -1930,42 +1954,42 @@ function MoneySection({
             ["登録番号", profile.invoiceNumber ? `登録番号：${profile.invoiceNumber}` : ""]
           ];
           return (
-            <div key={item.id} className="rounded-lg border border-line bg-white p-3">
+            <div key={item.id} className="rounded-lg border border-line bg-white p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="break-words font-bold">{item.clientCompany}</p>
-                  <p className="mt-1 text-sm text-slate-600">{siteLabel} / {item.workDescription || "作業内容未入力"}</p>
+                  <p className="break-words text-lg font-black">{item.clientCompany}</p>
+                  <p className="mt-1 break-words text-sm leading-6 text-slate-600">{siteLabel} / {item.workDescription || "作業内容未入力"}</p>
                 </div>
                 <span className="shrink-0 rounded-lg bg-skysoft px-2 py-1 text-xs font-bold text-genba">{item.status}</span>
               </div>
               {isInvoice ? (
                 <div className="mt-3 grid gap-2 rounded-lg bg-skysoft p-3">
                   {invoiceLineItems.slice(0, 5).map((lineItem) => (
-                    <div key={lineItem.id} className="flex items-start justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm">
+                    <div key={lineItem.id} className="flex items-start justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm">
                       <div className="min-w-0">
                         <p className="break-words font-bold text-ink">{lineItem.category || "その他"}：{lineItem.description || "-"}</p>
                         <p className="text-xs text-slate-500">{lineItem.quantity ?? "-"}{lineItem.unit || ""} × {lineItem.unitPrice === null ? "-" : yen.format(lineItem.unitPrice)}</p>
                       </div>
-                      <p className="shrink-0 font-black text-genba">{yen.format(lineItem.amount)}</p>
+                      <p className="shrink-0 text-base font-black text-genba">{yen.format(lineItem.amount)}</p>
                     </div>
                   ))}
                   {invoiceLineItems.length > 5 ? <p className="text-xs font-bold text-slate-500">ほか {invoiceLineItems.length - 5} 行</p> : null}
-                  <div className="flex items-center justify-between border-t border-line pt-2">
-                    <span className="text-sm font-bold text-ink">合計</span>
-                    <span className="text-xl font-black text-genba">{yen.format(item.totalAmount)}</span>
+                  <div className="flex items-center justify-between border-t border-line pt-3">
+                    <span className="text-sm font-bold text-ink">税込合計</span>
+                    <span className="text-2xl font-black text-genba">{yen.format(item.totalAmount)}</span>
                   </div>
                 </div>
               ) : (
                 <p className="mt-2 text-sm text-slate-600">{yen.format(item.totalAmount)} / {item.status}</p>
               )}
-              <div className={`mt-2 grid gap-2 ${isInvoice ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2"}`}>
-                <button onClick={() => downloadPdf(isInvoice ? "請求書" : "見積書", documentRows, profile.companyName || profile.name)} className="tap rounded-lg bg-skysoft font-bold text-genba">帳票を開く</button>
+              <div className={`mt-3 grid gap-2 ${isInvoice ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2"}`}>
+                <button onClick={() => downloadPdf(isInvoice ? "請求書" : "見積書", documentRows, profile.companyName || profile.name)} className="tap min-h-12 rounded-lg bg-skysoft font-bold text-genba">帳票を開く</button>
                 {isInvoice ? (
-                  <button type="button" disabled={item.status === "入金済み"} onClick={() => advanceInvoiceStatus(item as Invoice)} className="tap rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba disabled:border-line disabled:text-slate-400">
+                  <button type="button" disabled={item.status === "入金済み"} onClick={() => advanceInvoiceStatus(item as Invoice)} className="tap min-h-12 rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba disabled:border-line disabled:text-slate-400">
                     {item.status === "下書き" ? "送付済みにする" : item.status === "送付済み" ? "入金済みにする" : "入金済み"}
                   </button>
                 ) : null}
-                <button type="button" onClick={() => deleteMoneyItem(item as Invoice | Estimate)} className="tap rounded-lg border border-red-200 bg-white font-bold text-red-700">削除</button>
+                <button type="button" onClick={() => deleteMoneyItem(item as Invoice | Estimate)} className="tap min-h-12 rounded-lg border border-red-200 bg-white font-bold text-red-700">削除</button>
               </div>
             </div>
           );
