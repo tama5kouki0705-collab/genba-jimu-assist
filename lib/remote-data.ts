@@ -424,6 +424,12 @@ export async function saveReceiptRemote(receipt: Receipt, userId: string) {
   if (error) throw error;
 }
 
+export async function deleteReceiptRemote(receiptId: string) {
+  if (!supabase) return;
+  const { error } = await supabase.from("receipts").delete().eq("app_id", receiptId);
+  if (error) throw error;
+}
+
 export async function saveWorkLogRemote(workLog: WorkLog, userId: string) {
   if (!supabase) return;
   const { error } = await supabase.from("work_logs").upsert(workLogToDb(workLog, userId), { onConflict: "app_id" });
@@ -460,9 +466,21 @@ export async function saveInvoiceRemote(invoice: Invoice, userId: string) {
   if (error) throw error;
 }
 
+export async function deleteInvoiceRemote(invoiceId: string) {
+  if (!supabase) return;
+  const { error } = await supabase.from("invoices").delete().eq("app_id", invoiceId);
+  if (error) throw error;
+}
+
 export async function saveEstimateRemote(estimate: Estimate, userId: string) {
   if (!supabase) return;
   const { error } = await supabase.from("estimates").upsert(estimateToDb(estimate, userId), { onConflict: "app_id" });
+  if (error) throw error;
+}
+
+export async function deleteEstimateRemote(estimateId: string) {
+  if (!supabase) return;
+  const { error } = await supabase.from("estimates").delete().eq("app_id", estimateId);
   if (error) throw error;
 }
 
