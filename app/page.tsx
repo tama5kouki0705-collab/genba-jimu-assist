@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeJapaneseYen,
   Building2,
@@ -152,7 +152,7 @@ function TextArea({ label, name, defaultValue }: { label: string; name: string; 
 }
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <section className={`rounded-lg border border-line bg-white p-4 shadow-soft ${className}`}>{children}</section>;
+  return <section className={`mx-auto w-full rounded-lg border border-line bg-white p-4 shadow-soft ${className}`}>{children}</section>;
 }
 
 function SectionTitle({ icon, title, sub }: { icon: React.ReactNode; title: string; sub?: string }) {
@@ -856,7 +856,7 @@ export default function App() {
   );
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl bg-[#f7fbff] px-4 pb-28 pt-4">
+    <main className="mx-auto min-h-screen w-full max-w-md bg-[#f7fbff] px-4 pb-28 pt-4">
       <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-line bg-[#f7fbff]/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center justify-between">
           <div>
@@ -1508,10 +1508,32 @@ function SaveButton({ label = "保存する" }: { label?: string }) {
 }
 
 function FileInput({ label, name }: { label: string; name: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = useState("ファイル未選択");
+
+  useEffect(() => {
+    const form = inputRef.current?.form;
+    if (!form) return;
+    const clearFileName = () => setFileName("ファイル未選択");
+    form.addEventListener("reset", clearFileName);
+    return () => form.removeEventListener("reset", clearFileName);
+  }, []);
+
   return (
     <label className="grid gap-1 text-sm font-semibold text-ink">
       {label}
-      <input name={name} type="file" accept="image/*" className="tap rounded-lg border border-line bg-white px-4 py-3 text-base" />
+      <span className="tap flex w-full items-center justify-center gap-3 rounded-lg border border-line bg-white px-3 py-3 text-sm text-slate-600">
+        <span className="shrink-0 rounded-full bg-slate-100 px-4 py-2 font-bold text-ink">ファイルを選択</span>
+        <span className="min-w-0 truncate font-semibold">{fileName}</span>
+      </span>
+      <input
+        ref={inputRef}
+        name={name}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={(event) => setFileName(event.currentTarget.files?.[0]?.name || "ファイル未選択")}
+      />
     </label>
   );
 }
