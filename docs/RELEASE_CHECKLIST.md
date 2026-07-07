@@ -8,6 +8,9 @@
 - Storage bucket `genba-files` が private で作成済みである。
 - Storage policy が本人の `{user_id}/...` 配下だけを許可している。
 - Table Editorで `receipts` に OCR全文保存用の値が入らないことを確認する。
+- Authentication > URL Configuration の Site URL が `https://genba-jimu-assist.vercel.app` である。
+- Authentication > URL Configuration の Redirect URLs に `https://genba-jimu-assist.vercel.app` が含まれている。
+- パスワード再設定メール、Googleログイン、メール確認後の戻り先が localhost ではなく `https://genba-jimu-assist.vercel.app` になることを本番で確認する。
 
 ## 2. Vercel本番
 

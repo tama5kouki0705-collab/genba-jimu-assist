@@ -43,7 +43,7 @@ import { ensureImageFile, fileToDataUrl } from "@/lib/client-files";
 import { buildCalendarItems } from "@/lib/calendar-items";
 import { addMonths, calendarCells, calendarKindClass, daysLeft, isCurrentMonth, localDateInput, monthInput } from "@/lib/calendar-domain";
 import { createInvoiceDraftFromSchedule, createInvoiceDraftFromWorkLog } from "@/lib/invoice-workflow";
-import { accountKey, getLocalAccounts, hashPassword, normalizeEmail, saveLocalAccounts, useStoredState } from "@/lib/local-state";
+import { STORAGE_ERROR_EVENT, STORAGE_LIMIT_MESSAGE, accountKey, getLocalAccounts, hashPassword, normalizeEmail, saveLocalAccounts, setLocalStorageItem, useStoredState } from "@/lib/local-state";
 import { buildPrintableDocumentHtml } from "@/lib/pdf-documents";
 import { receiptStatusLabel } from "@/lib/receipt-domain";
 import { RECEIPT_ACCOUNT_CATEGORIES, normalizeReceiptText, parseReceiptOcr, prepareReceiptImage, scoreReceiptOcr, type ReceiptOcrFields } from "@/lib/receipt-ocr";
@@ -201,6 +201,14 @@ export default function App() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const showStorageError = (event: Event) => {
+      setMessage((event as CustomEvent<string>).detail || STORAGE_LIMIT_MESSAGE);
+    };
+    window.addEventListener(STORAGE_ERROR_EVENT, showStorageError);
+    return () => window.removeEventListener(STORAGE_ERROR_EVENT, showStorageError);
   }, []);
 
   useEffect(() => {
@@ -369,7 +377,12 @@ export default function App() {
         setMessage("このメールは登録済みです。ログインしてください");
         return;
       }
-      saveLocalAccounts([...accounts, { email: normalizedEmail, passwordHash: await hashPassword(password), createdAt: new Date().toISOString() }]);
+      const saved = saveLocalAccounts([...accounts, { email: normalizedEmail, passwordHash: await hashPassword(password), createdAt: new Date().toISOString() }]);
+      if (!saved) {
+        setMessage(STORAGE_LIMIT_MESSAGE);
+        setIsAuthBusy(false);
+        return;
+      }
       setUserId(`local:${normalizedEmail}`);
       setUserEmail(normalizedEmail);
       setTab("profile");
@@ -473,7 +486,10 @@ export default function App() {
 
   async function downloadPdf(title: string, rows: Array<[string, string]>, note?: string) {
     const html = buildPrintableDocumentHtml({ title, rows, issuerName: note });
-    localStorage.setItem("genba:print-html", html);
+    if (!setLocalStorageItem("genba:print-html", html)) {
+      setMessage(STORAGE_LIMIT_MESSAGE);
+      return;
+    }
     window.location.href = "/print";
   }
 
