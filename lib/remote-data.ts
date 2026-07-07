@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { normalizeInvoiceLineItems } from "@/lib/invoice-line-items";
 import type { AdminUser, CalendarSchedule, Estimate, Invoice, Profile, Qualification, Receipt, Site, Vehicle, WorkLog } from "@/lib/types";
 
 const FILE_BUCKET = "genba-files";
@@ -249,31 +250,34 @@ const vehicleFromDb = (row: any): Vehicle => ({
   memo: row.memo ?? ""
 });
 
-const invoiceToDb = (invoice: Invoice, userId: string) => ({
-  app_id: invoice.id,
-  user_id: userId,
-  site_app_id: nullable(invoice.siteId),
-  site_name: invoice.siteName,
-  client_company: invoice.clientCompany,
-  invoice_number: invoice.invoiceNumber ?? null,
-  issue_date: invoice.issueDate || null,
-  subject: invoice.subject ?? null,
-  work_description: invoice.workDescription,
-  work_date: nullable(invoice.workDate),
-  payment_terms: invoice.paymentTerms ?? null,
-  due_date: invoice.dueDate || null,
-  notes: invoice.notes ?? null,
-  labor_count: invoice.laborCount,
-  daily_rate: invoice.dailyRate,
-  material_cost: invoice.materialCost,
-  other_cost: invoice.otherCost,
-  tax_rate: invoice.taxRate,
-  subtotal: invoice.subtotal,
-  tax_amount: invoice.taxAmount,
-  total_amount: invoice.totalAmount,
-  status: invoice.status,
-  pdf_url: invoice.pdfUrl ?? null
-});
+const invoiceToDb = (invoice: Invoice, userId: string, includeLineItems = true) => {
+  const row = {
+    app_id: invoice.id,
+    user_id: userId,
+    site_app_id: nullable(invoice.siteId),
+    site_name: invoice.siteName,
+    client_company: invoice.clientCompany,
+    invoice_number: invoice.invoiceNumber ?? null,
+    issue_date: invoice.issueDate || null,
+    subject: invoice.subject ?? null,
+    work_description: invoice.workDescription,
+    work_date: nullable(invoice.workDate),
+    payment_terms: invoice.paymentTerms ?? null,
+    due_date: invoice.dueDate || null,
+    notes: invoice.notes ?? null,
+    labor_count: invoice.laborCount,
+    daily_rate: invoice.dailyRate,
+    material_cost: invoice.materialCost,
+    other_cost: invoice.otherCost,
+    tax_rate: invoice.taxRate,
+    subtotal: invoice.subtotal,
+    tax_amount: invoice.taxAmount,
+    total_amount: invoice.totalAmount,
+    status: invoice.status,
+    pdf_url: invoice.pdfUrl ?? null
+  };
+  return includeLineItems ? { ...row, line_items: normalizeInvoiceLineItems(invoice.lineItems, invoice) } : row;
+};
 
 const invoiceFromDb = (row: any): Invoice => ({
   id: row.app_id ?? row.id,
@@ -297,6 +301,14 @@ const invoiceFromDb = (row: any): Invoice => ({
   taxAmount: Number(row.tax_amount ?? 0),
   totalAmount: Number(row.total_amount ?? 0),
   status: row.status ?? "下書き",
+  lineItems: normalizeInvoiceLineItems(row.line_items, {
+    workDescription: row.work_description ?? "",
+    laborCount: Number(row.labor_count ?? 0),
+    dailyRate: Number(row.daily_rate ?? 0),
+    materialCost: Number(row.material_cost ?? 0),
+    otherCost: Number(row.other_cost ?? 0),
+    subtotal: Number(row.subtotal ?? 0)
+  }),
   pdfUrl: row.pdf_url ?? undefined
 });
 
@@ -463,6 +475,11 @@ export async function saveVehicleRemote(vehicle: Vehicle, userId: string) {
 export async function saveInvoiceRemote(invoice: Invoice, userId: string) {
   if (!supabase) return;
   const { error } = await supabase.from("invoices").upsert(invoiceToDb(invoice, userId), { onConflict: "app_id" });
+  if (error && /line_items|schema cache|column/i.test(error.message)) {
+    const fallback = await supabase.from("invoices").upsert(invoiceToDb(invoice, userId, false), { onConflict: "app_id" });
+    if (fallback.error) throw fallback.error;
+    return;
+  }
   if (error) throw error;
 }
 

@@ -27,7 +27,18 @@ export function createInvoiceDraftFromSchedule(schedule: CalendarSchedule, site:
     subtotal,
     taxAmount,
     totalAmount: subtotal + taxAmount,
-    status: "下書き"
+    status: "下書き",
+    lineItems: [
+      {
+        id: "line-1",
+        category: "人工代",
+        description: schedule.workDescription || site?.workDescription || `${schedule.siteName || "現場"} 作業`,
+        quantity: laborCount,
+        unit: "人工",
+        unitPrice: dailyRate,
+        amount: subtotal
+      }
+    ]
   };
 }
 
@@ -58,6 +69,17 @@ export function createInvoiceDraftFromWorkLog(workLog: WorkLog, site: Site | und
     subtotal,
     taxAmount,
     totalAmount: subtotal + taxAmount,
-    status: "下書き"
+    status: "下書き",
+    lineItems: [
+      {
+        id: "line-1",
+        category: "人工代",
+        description: workLog.memo.split("\n").find(Boolean) || schedule?.workDescription || `${workLog.siteName || schedule?.siteName || "現場"} 作業`,
+        quantity: laborCount,
+        unit: "人工",
+        unitPrice: dailyRate,
+        amount: subtotal
+      }
+    ]
   };
 }

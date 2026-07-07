@@ -88,6 +88,16 @@ export type CalendarItem = {
   kind: "予定" | "現場" | "作業" | "領収書" | "請求書" | "見積" | "期限";
 };
 
+export type InvoiceLineItem = {
+  id: string;
+  category: string;
+  description: string;
+  quantity: number | null;
+  unit: string;
+  unitPrice: number | null;
+  amount: number;
+};
+
 export type Invoice = {
   id: string;
   siteId: string;
@@ -110,6 +120,7 @@ export type Invoice = {
   taxAmount: number;
   totalAmount: number;
   status: "下書き" | "送付済み" | "入金済み";
+  lineItems?: InvoiceLineItem[];
   pdfUrl?: string;
 };
 

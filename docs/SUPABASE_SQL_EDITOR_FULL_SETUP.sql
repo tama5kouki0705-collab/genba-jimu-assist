@@ -111,6 +111,7 @@ create table public.invoices (
   tax_amount numeric default 0,
   total_amount numeric default 0,
   status text not null default '下書き',
+  line_items jsonb not null default '[]'::jsonb,
   pdf_url text,
   created_at timestamptz not null default now()
 );

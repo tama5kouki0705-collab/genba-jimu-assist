@@ -45,11 +45,12 @@ import { ensureImageFile, fileToDataUrl } from "@/lib/client-files";
 import { buildCalendarItems } from "@/lib/calendar-items";
 import { addMonths, calendarCells, calendarKindClass, daysLeft, isCurrentMonth, localDateInput, monthInput } from "@/lib/calendar-domain";
 import { createInvoiceDraftFromSchedule, createInvoiceDraftFromWorkLog } from "@/lib/invoice-workflow";
+import { INVOICE_LINE_ITEM_CATEGORIES, INVOICE_LINE_ITEM_UNITS, MAX_INVOICE_LINE_ITEMS, MIN_INVOICE_LINE_ITEMS, calculateInvoiceTotals, normalizeInvoiceLineItems } from "@/lib/invoice-line-items";
 import { STORAGE_ERROR_EVENT, STORAGE_LIMIT_MESSAGE, accountKey, getLocalAccounts, hashPassword, normalizeEmail, saveLocalAccounts, setLocalStorageItem, useStoredState } from "@/lib/local-state";
 import { buildPrintableDocumentHtml } from "@/lib/pdf-documents";
 import { receiptStatusLabel } from "@/lib/receipt-domain";
 import { RECEIPT_ACCOUNT_CATEGORIES, normalizeReceiptText, parseReceiptOcr, prepareReceiptImage, scoreReceiptOcr, type ReceiptOcrFields } from "@/lib/receipt-ocr";
-import type { AdminUser, CalendarSchedule, Estimate, Invoice, Plan, Profile, Qualification, Receipt, Site, Vehicle, WorkLog } from "@/lib/types";
+import type { AdminUser, CalendarSchedule, Estimate, Invoice, InvoiceLineItem, Plan, Profile, Qualification, Receipt, Site, Vehicle, WorkLog } from "@/lib/types";
 
 type Tab =
   | "home"
@@ -1564,6 +1565,34 @@ function SiteNameField({ sites }: { sites: Site[] }) {
   );
 }
 
+function blankInvoiceLineItem(id: string, overrides: Partial<InvoiceLineItem> = {}): InvoiceLineItem {
+  const quantity = overrides.quantity ?? null;
+  const unitPrice = overrides.unitPrice ?? null;
+  return {
+    id,
+    category: overrides.category ?? "",
+    description: overrides.description ?? "",
+    quantity,
+    unit: overrides.unit ?? "式",
+    unitPrice,
+    amount: overrides.amount ?? ((quantity ?? 0) * (unitPrice ?? 0))
+  };
+}
+
+function defaultInvoiceLineItems(defaultDailyRate: number) {
+  return [
+    blankInvoiceLineItem("line-1", { category: "人工代", quantity: 1, unit: "人工", unitPrice: defaultDailyRate, amount: defaultDailyRate }),
+    blankInvoiceLineItem("line-2", { category: "材料費" }),
+    blankInvoiceLineItem("line-3", { category: "諸経費" })
+  ];
+}
+
+function nullableInputNumber(value: string) {
+  if (value === "") return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
 function CrudSection({ title, sub, icon, children }: { title: string; sub: string; icon: React.ReactNode; children: React.ReactNode }) {
   return <Card><SectionTitle icon={icon} title={title} sub={sub} />{children}</Card>;
 }
@@ -1600,6 +1629,43 @@ function MoneySection({
     ...sites.map((site) => site.clientCompany).filter(Boolean),
     ...items.map((item: any) => item.clientCompany).filter(Boolean)
   ]));
+  const defaultDailyRate = sites[0]?.dailyRate || 25000;
+  const [invoiceTaxRate, setInvoiceTaxRate] = useState(10);
+  const [invoiceDraftLineItems, setInvoiceDraftLineItems] = useState<InvoiceLineItem[]>(() => defaultInvoiceLineItems(defaultDailyRate));
+  const invoiceDraftSavedLineItems = useMemo(() => normalizeInvoiceLineItems(invoiceDraftLineItems), [invoiceDraftLineItems]);
+  const invoiceDraftTotals = useMemo(() => calculateInvoiceTotals(invoiceDraftSavedLineItems, invoiceTaxRate), [invoiceDraftSavedLineItems, invoiceTaxRate]);
+
+  function resetInvoiceDraftLineItems() {
+    setInvoiceDraftLineItems(defaultInvoiceLineItems(defaultDailyRate));
+    setInvoiceTaxRate(10);
+  }
+
+  function updateInvoiceDraftLineItem(lineId: string, updates: Partial<InvoiceLineItem>, shouldRecalculateAmount = false) {
+    setInvoiceDraftLineItems((lineItems) => lineItems.map((lineItem) => {
+      if (lineItem.id !== lineId) return lineItem;
+      const next = { ...lineItem, ...updates };
+      return shouldRecalculateAmount ? { ...next, amount: (next.quantity ?? 0) * (next.unitPrice ?? 0) } : next;
+    }));
+  }
+
+  function addInvoiceDraftLineItem() {
+    setInvoiceDraftLineItems((lineItems) => lineItems.length >= MAX_INVOICE_LINE_ITEMS ? lineItems : [...lineItems, blankInvoiceLineItem(`line-${lineItems.length + 1}`)]);
+  }
+
+  function removeInvoiceDraftLineItem(lineId: string, index: number) {
+    if (index < MIN_INVOICE_LINE_ITEMS) return;
+    setInvoiceDraftLineItems((lineItems) => lineItems.filter((lineItem) => lineItem.id !== lineId));
+  }
+
+  function invoiceLegacyAmounts(lineItems: InvoiceLineItem[]) {
+    const laborLine = lineItems.find((lineItem) => lineItem.category === "人工代");
+    const laborCount = laborLine?.quantity ?? 0;
+    const dailyRate = laborLine?.unitPrice ?? 0;
+    const materialCost = lineItems.filter((lineItem) => lineItem.category === "材料費").reduce((sum, lineItem) => sum + lineItem.amount, 0);
+    const laborAmount = laborCount * dailyRate;
+    const otherCost = Math.max(0, lineItems.reduce((sum, lineItem) => sum + lineItem.amount, 0) - laborAmount - materialCost);
+    return { laborCount, dailyRate, materialCost, otherCost };
+  }
 
   async function advanceInvoiceStatus(invoice: Invoice) {
     const nextStatus = invoice.status === "下書き" ? "送付済み" : invoice.status === "送付済み" ? "入金済み" : null;
@@ -1619,13 +1685,16 @@ function MoneySection({
       <form className="grid gap-3" onSubmit={async (e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
-        const taxRate = num(fd.get("taxRate")) || 10;
+        const rawTaxRate = fd.get("taxRate");
+        const taxRate = rawTaxRate === null || rawTaxRate === "" ? 10 : Number(rawTaxRate);
         const siteName = String(fd.get("siteName") || "").trim();
         const matchedSite = sites.find((site) => site.siteName === siteName);
         const siteId = matchedSite?.id ?? "";
         if (isInvoice) {
-          const subtotal = num(fd.get("laborCount")) * num(fd.get("dailyRate")) + num(fd.get("materialCost")) + num(fd.get("otherCost"));
-          const taxAmount = Math.round(subtotal * taxRate / 100);
+          const lineItems = normalizeInvoiceLineItems(invoiceDraftLineItems);
+          const totals = calculateInvoiceTotals(lineItems, taxRate);
+          const legacyAmounts = invoiceLegacyAmounts(lineItems);
+          const lineSummary = lineItems.map((lineItem) => lineItem.description || lineItem.category).filter(Boolean).join(" / ");
           const invoice = {
             id: uid("invoice"),
             siteId,
@@ -1634,23 +1703,25 @@ function MoneySection({
             invoiceNumber: String(fd.get("invoiceNumber") || `INV-${today.replaceAll("-", "")}`),
             issueDate: String(fd.get("issueDate") || today),
             subject: String(fd.get("subject") || siteName || "工事一式"),
-            workDescription: String(fd.get("workDescription") || ""),
+            workDescription: String(fd.get("workDescription") || lineSummary || ""),
             workDate: String(fd.get("workDate") || today),
             paymentTerms: String(fd.get("paymentTerms") || ""),
             dueDate: String(fd.get("dueDate") || ""),
             notes: String(fd.get("notes") || ""),
-            laborCount: num(fd.get("laborCount")),
-            dailyRate: num(fd.get("dailyRate")),
-            materialCost: num(fd.get("materialCost")),
-            otherCost: num(fd.get("otherCost")),
+            laborCount: legacyAmounts.laborCount,
+            dailyRate: legacyAmounts.dailyRate,
+            materialCost: legacyAmounts.materialCost,
+            otherCost: legacyAmounts.otherCost,
             taxRate,
-            subtotal,
-            taxAmount,
-            totalAmount: subtotal + taxAmount,
-            status: "下書き" as const
+            subtotal: totals.subtotal,
+            taxAmount: totals.taxAmount,
+            totalAmount: totals.totalAmount,
+            status: "下書き" as const,
+            lineItems
           };
           setItems([invoice, ...items]);
           await saveRemote((id) => saveInvoiceRemote(invoice, id));
+          resetInvoiceDraftLineItems();
         } else {
           const subtotal = num(fd.get("quantity")) * num(fd.get("unitPrice"));
           const taxAmount = Math.round(subtotal * taxRate / 100);
@@ -1706,10 +1777,67 @@ function MoneySection({
             <Field label="作業日" name="workDate" type="date" defaultValue={today} />
             <Field label="支払条件" name="paymentTerms" defaultValue="月末締め翌月末払い" />
             <Field label="支払期日" name="dueDate" type="date" />
-            <Field label="人工数" name="laborCount" type="number" defaultValue={1} />
-            <Field label="人工単価" name="dailyRate" type="number" defaultValue={sites[0]?.dailyRate || 25000} />
-            <Field label="材料費" name="materialCost" type="number" defaultValue={0} />
-            <Field label="その他費用" name="otherCost" type="number" defaultValue={0} />
+            <div className="grid gap-3 rounded-lg border border-line bg-white p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-genba">請求明細</p>
+                  <p className="mt-1 text-xs text-slate-600">数量×単価で計算できます。金額は直接修正もできます。</p>
+                </div>
+                <span className="shrink-0 rounded-lg bg-skysoft px-2 py-1 text-xs font-bold text-genba">{invoiceDraftLineItems.length}/{MAX_INVOICE_LINE_ITEMS}</span>
+              </div>
+              <datalist id="invoice-line-category-options">
+                {INVOICE_LINE_ITEM_CATEGORIES.map((category) => <option key={category} value={category} />)}
+              </datalist>
+              <datalist id="invoice-line-unit-options">
+                {INVOICE_LINE_ITEM_UNITS.map((unit) => <option key={unit} value={unit} />)}
+              </datalist>
+              <div className="grid gap-3">
+                {invoiceDraftLineItems.map((lineItem, index) => (
+                  <div key={lineItem.id} className="grid gap-2 rounded-lg bg-skysoft p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-black text-ink">明細 {index + 1}</p>
+                      {index >= MIN_INVOICE_LINE_ITEMS ? (
+                        <button type="button" onClick={() => removeInvoiceDraftLineItem(lineItem.id, index)} className="tap min-h-0 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700">削除</button>
+                      ) : null}
+                    </div>
+                    <label className="grid gap-1 text-xs font-bold text-ink">
+                      名目
+                      <input value={lineItem.category} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { category: e.currentTarget.value })} list="invoice-line-category-options" className="tap rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" placeholder="例：人工代" />
+                    </label>
+                    <label className="grid gap-1 text-xs font-bold text-ink">
+                      内容
+                      <input value={lineItem.description} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { description: e.currentTarget.value })} className="tap rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" placeholder="例：配線工事、器具付け" />
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="grid gap-1 text-xs font-bold text-ink">
+                        数量
+                        <input value={lineItem.quantity ?? ""} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { quantity: nullableInputNumber(e.currentTarget.value) }, true)} type="number" step="0.01" className="tap min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
+                      </label>
+                      <label className="grid gap-1 text-xs font-bold text-ink">
+                        単位
+                        <input value={lineItem.unit} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { unit: e.currentTarget.value })} list="invoice-line-unit-options" className="tap min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="grid gap-1 text-xs font-bold text-ink">
+                        単価
+                        <input value={lineItem.unitPrice ?? ""} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { unitPrice: nullableInputNumber(e.currentTarget.value) }, true)} type="number" className="tap min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
+                      </label>
+                      <label className="grid gap-1 text-xs font-bold text-ink">
+                        金額
+                        <input value={lineItem.amount || ""} onChange={(e) => updateInvoiceDraftLineItem(lineItem.id, { amount: num(e.currentTarget.value) })} type="number" className="tap min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-base font-bold outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button type="button" disabled={invoiceDraftLineItems.length >= MAX_INVOICE_LINE_ITEMS} onClick={addInvoiceDraftLineItem} className="tap rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba disabled:border-line disabled:text-slate-400">+ 明細を追加</button>
+              <div className="grid gap-2 rounded-lg border border-line bg-white p-3">
+                <div className="flex items-center justify-between text-sm"><span className="text-slate-600">小計</span><strong>{yen.format(invoiceDraftTotals.subtotal)}</strong></div>
+                <div className="flex items-center justify-between text-sm"><span className="text-slate-600">消費税</span><strong>{yen.format(invoiceDraftTotals.taxAmount)}</strong></div>
+                <div className="flex items-center justify-between border-t border-line pt-2 text-base"><span className="font-bold text-ink">合計</span><strong className="text-xl text-genba">{yen.format(invoiceDraftTotals.totalAmount)}</strong></div>
+              </div>
+            </div>
           </>
         ) : (
           <>
@@ -1723,7 +1851,16 @@ function MoneySection({
           </>
         )}
         <TextArea label="備考" name="notes" />
-        <SelectField label="消費税率" name="taxRate"><option value="10">10%</option><option value="8">8%</option><option value="0">0%</option></SelectField>
+        {isInvoice ? (
+          <label className="grid gap-1 text-sm font-semibold text-ink">
+            消費税率
+            <select name="taxRate" value={invoiceTaxRate} onChange={(e) => setInvoiceTaxRate(Number(e.currentTarget.value))} className="tap rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft">
+              <option value="10">10%</option><option value="8">8%</option><option value="0">0%</option>
+            </select>
+          </label>
+        ) : (
+          <SelectField label="消費税率" name="taxRate"><option value="10">10%</option><option value="8">8%</option><option value="0">0%</option></SelectField>
+        )}
         <p className="rounded-lg bg-skysoft p-3 text-sm text-slate-700">振込先：{profile.bankName || "プロフィール登録後に自動反映"}</p>
         <SaveButton label={isInvoice ? "請求書を作る" : "見積書を作る"} />
       </form>
@@ -1731,6 +1868,11 @@ function MoneySection({
         {items.map((item: any) => {
           const siteLabel = item.siteName || sites.find((site) => site.id === item.siteId)?.siteName || "現場未入力";
           const bankInfo = [profile.bankName, profile.bankBranch, profile.bankType, profile.bankAccountNumber, profile.bankAccountName].filter(Boolean).join(" ");
+          const invoiceLineItems = isInvoice ? normalizeInvoiceLineItems((item as Invoice).lineItems, item as Invoice) : [];
+          const invoiceLineRows: Array<[string, string]> = invoiceLineItems.map((lineItem, index) => [
+            `明細${index + 1}`,
+            `${lineItem.category || "その他"} / ${lineItem.description || "-"} / ${lineItem.quantity ?? "-"}${lineItem.unit || ""} × ${lineItem.unitPrice === null ? "-" : yen.format(lineItem.unitPrice)} / ${yen.format(lineItem.amount)}`
+          ]);
           const documentRows: Array<[string, string]> = isInvoice ? [
             ["書類種別", "請求書"],
             ["宛先", item.clientCompany],
@@ -1742,11 +1884,7 @@ function MoneySection({
             ["作業日", item.workDate || "-"],
             ["支払条件", item.paymentTerms || "-"],
             ["支払期日", item.dueDate || "-"],
-            ["人工数", String(item.laborCount || 0)],
-            ["人工単価", yen.format(item.dailyRate || 0)],
-            ["人工費", yen.format((item.laborCount || 0) * (item.dailyRate || 0))],
-            ["材料費", yen.format(item.materialCost || 0)],
-            ["その他費用", yen.format(item.otherCost || 0)],
+            ...invoiceLineRows,
             ["消費税率", `${item.taxRate || 0}%`],
             ["小計", yen.format(item.subtotal)],
             ["消費税", yen.format(item.taxAmount)],
@@ -1792,9 +1930,34 @@ function MoneySection({
             ["登録番号", profile.invoiceNumber ? `登録番号：${profile.invoiceNumber}` : ""]
           ];
           return (
-            <div key={item.id} className="rounded-lg border border-line p-3">
-              <p className="font-bold">{item.clientCompany}</p>
-              <p className="text-sm text-slate-600">{siteLabel} / {item.workDescription} / {yen.format(item.totalAmount)} / {item.status}</p>
+            <div key={item.id} className="rounded-lg border border-line bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="break-words font-bold">{item.clientCompany}</p>
+                  <p className="mt-1 text-sm text-slate-600">{siteLabel} / {item.workDescription || "作業内容未入力"}</p>
+                </div>
+                <span className="shrink-0 rounded-lg bg-skysoft px-2 py-1 text-xs font-bold text-genba">{item.status}</span>
+              </div>
+              {isInvoice ? (
+                <div className="mt-3 grid gap-2 rounded-lg bg-skysoft p-3">
+                  {invoiceLineItems.slice(0, 5).map((lineItem) => (
+                    <div key={lineItem.id} className="flex items-start justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <p className="break-words font-bold text-ink">{lineItem.category || "その他"}：{lineItem.description || "-"}</p>
+                        <p className="text-xs text-slate-500">{lineItem.quantity ?? "-"}{lineItem.unit || ""} × {lineItem.unitPrice === null ? "-" : yen.format(lineItem.unitPrice)}</p>
+                      </div>
+                      <p className="shrink-0 font-black text-genba">{yen.format(lineItem.amount)}</p>
+                    </div>
+                  ))}
+                  {invoiceLineItems.length > 5 ? <p className="text-xs font-bold text-slate-500">ほか {invoiceLineItems.length - 5} 行</p> : null}
+                  <div className="flex items-center justify-between border-t border-line pt-2">
+                    <span className="text-sm font-bold text-ink">合計</span>
+                    <span className="text-xl font-black text-genba">{yen.format(item.totalAmount)}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-slate-600">{yen.format(item.totalAmount)} / {item.status}</p>
+              )}
               <div className={`mt-2 grid gap-2 ${isInvoice ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2"}`}>
                 <button onClick={() => downloadPdf(isInvoice ? "請求書" : "見積書", documentRows, profile.companyName || profile.name)} className="tap rounded-lg bg-skysoft font-bold text-genba">帳票を開く</button>
                 {isInvoice ? (
