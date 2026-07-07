@@ -1170,11 +1170,12 @@ export default function App() {
         <CrudSection title="現場登録" icon={<Building2 />} sub="元請・担当者・作業内容をまとめます">
           <form className="grid gap-3" onSubmit={async (e) => {
             e.preventDefault();
-            const fd = new FormData(e.currentTarget);
+            const form = e.currentTarget;
+            const fd = new FormData(form);
             const site = { id: uid("site"), siteName: String(fd.get("siteName") || ""), address: String(fd.get("address") || ""), clientCompany: String(fd.get("clientCompany") || ""), clientPerson: String(fd.get("clientPerson") || ""), clientPhone: String(fd.get("clientPhone") || ""), startDate: String(fd.get("startDate") || ""), endDate: String(fd.get("endDate") || ""), workDescription: String(fd.get("workDescription") || ""), dailyRate: num(fd.get("dailyRate")), memo: String(fd.get("memo") || "") };
             setSites([site, ...sites]);
             await saveRemote((id) => saveSiteRemote(site, id));
-            e.currentTarget.reset();
+            form.reset();
           }}>
             <Field label="現場名" name="siteName" required />
             <Field label="現場住所" name="address" />
@@ -1196,7 +1197,8 @@ export default function App() {
         <CrudSection title="領収書管理" icon={<Camera />} sub="撮る、確認する、経費にする">
           <form key={editingReceipt?.id ?? "new-receipt"} className="grid gap-4" onSubmit={async (e) => {
             e.preventDefault();
-            const fd = new FormData(e.currentTarget);
+            const form = e.currentTarget;
+            const fd = new FormData(form);
             const imageFile = (fd.get("image") as File) || null;
             if ((!imageFile || !imageFile.size) && !editingReceipt?.imageUrl && !editingReceipt?.imagePath) {
               setReceiptOcrStatus("先に領収書写真を選んでください");
@@ -1235,7 +1237,7 @@ export default function App() {
             };
             setReceipts([receipt, ...receipts.filter((item) => item.id !== receipt.id)]);
             await saveRemote((id) => saveReceiptRemote(receipt, id));
-            e.currentTarget.reset();
+            form.reset();
             setEditingReceiptId("");
             setReceiptOcrStatus("写真を選んでください");
             setReceiptOcrText("");
@@ -1368,7 +1370,8 @@ export default function App() {
         <CrudSection title="資格証一覧" icon={<IdCard />} sub="期限30日前を見えるようにします">
           <form className="grid gap-3" onSubmit={async (e) => {
             e.preventDefault();
-            const fd = new FormData(e.currentTarget);
+            const form = e.currentTarget;
+            const fd = new FormData(form);
             let imageUrl = "";
             try {
               imageUrl = await fileToDataUrl((fd.get("image") as File) || null);
@@ -1379,7 +1382,7 @@ export default function App() {
             const qualification = { id: uid("qualification"), qualificationName: String(fd.get("qualificationName") || ""), acquiredDate: String(fd.get("acquiredDate") || ""), expiryDate: String(fd.get("expiryDate") || ""), imageUrl, memo: String(fd.get("memo") || "") };
             setQualifications([qualification, ...qualifications]);
             await saveRemote((id) => saveQualificationRemote(qualification, id));
-            e.currentTarget.reset();
+            form.reset();
           }}>
             <Field label="資格名" name="qualificationName" required />
             <Field label="取得日" name="acquiredDate" type="date" />
@@ -1397,7 +1400,8 @@ export default function App() {
         <CrudSection title="車両一覧" icon={<Car />} sub="車検・保険期限をまとめて管理します">
           <form className="grid gap-3" onSubmit={async (e) => {
             e.preventDefault();
-            const fd = new FormData(e.currentTarget);
+            const form = e.currentTarget;
+            const fd = new FormData(form);
             let inspectionDocumentUrl = "";
             let compulsoryInsuranceDocumentUrl = "";
             let optionalInsuranceDocumentUrl = "";
@@ -1412,7 +1416,7 @@ export default function App() {
             const vehicle = { id: uid("vehicle"), vehicleName: String(fd.get("vehicleName") || ""), vehicleNumber: String(fd.get("vehicleNumber") || ""), vehicleType: String(fd.get("vehicleType") || ""), inspectionExpiryDate: String(fd.get("inspectionExpiryDate") || ""), compulsoryInsuranceExpiryDate: String(fd.get("compulsoryInsuranceExpiryDate") || ""), optionalInsuranceExpiryDate: String(fd.get("optionalInsuranceExpiryDate") || ""), inspectionDocumentUrl, compulsoryInsuranceDocumentUrl, optionalInsuranceDocumentUrl, memo: String(fd.get("memo") || "") };
             setVehicles([vehicle, ...vehicles]);
             await saveRemote((id) => saveVehicleRemote(vehicle, id));
-            e.currentTarget.reset();
+            form.reset();
           }}>
             <Field label="車両名" name="vehicleName" required />
             <Field label="車両番号" name="vehicleNumber" />
@@ -1696,7 +1700,8 @@ function MoneySection({
     <CrudSection title={isInvoice ? "請求書作成" : "見積書作成"} icon={isInvoice ? <FileText /> : <ClipboardList />} sub="金額は自動計算します">
       <form className="grid gap-4" onSubmit={async (e) => {
         e.preventDefault();
-        const fd = new FormData(e.currentTarget);
+        const form = e.currentTarget;
+        const fd = new FormData(form);
         const rawTaxRate = fd.get("taxRate");
         const taxRate = rawTaxRate === null || rawTaxRate === "" ? 10 : Number(rawTaxRate);
         const siteName = String(fd.get("siteName") || "").trim();
@@ -1763,7 +1768,7 @@ function MoneySection({
           setItems([estimate, ...items]);
           await saveRemote((id) => saveEstimateRemote(estimate, id));
         }
-        e.currentTarget.reset();
+        form.reset();
       }}>
         <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
           {isInvoice ? "請求先会社名" : "見積先会社名"}
