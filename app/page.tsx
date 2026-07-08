@@ -71,7 +71,7 @@ type Tab =
 const today = localDateInput();
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
 const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
-const receiptPurposeOptions = ["材料費", "消耗品費", "交通費", "外注費", "通信費", "接待交際費", "その他"];
+const receiptPurposeOptions = ["材料", "工具・道具", "交通", "駐車場", "高速", "燃料", "消耗品", "外注", "その他"];
 
 function addDaysInput(dateInput: string, days: number) {
   const date = dateInput ? new Date(dateInput) : new Date();
@@ -755,7 +755,7 @@ export default function App() {
           <ClipboardList size={34} />
         </div>
         <div>
-          <h1 className="text-3xl font-black">親方の味方</h1>
+          <h1 className="text-3xl font-black">現場事務アシスト</h1>
           <p className="mt-2 text-slate-600">ログイン状態を確認しています</p>
         </div>
       </main>
@@ -793,8 +793,8 @@ export default function App() {
           <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-lg bg-genba text-white">
             <ClipboardList size={34} />
           </div>
-          <h1 className="text-3xl font-black">親方の味方</h1>
-          <p className="mt-2 text-slate-600">現場が終わったら5分で事務が終わる</p>
+          <h1 className="text-3xl font-black">現場事務アシスト</h1>
+          <p className="mt-2 text-slate-600">担当現場の記録を会社へ共有できる</p>
         </div>
         <Card>
           <div className="grid gap-3">
@@ -895,8 +895,8 @@ export default function App() {
       <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-line bg-[#f7fbff]/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold text-genba">効率重視のAI事務アシスタント</p>
-            <h1 className="text-2xl font-black">親方の味方</h1>
+            <p className="text-xs font-bold text-genba">現場責任者向けの記録アシスタント</p>
+            <h1 className="text-2xl font-black">現場事務アシスト</h1>
             <p className="mt-1 text-xs text-slate-500">{syncStatus}</p>
           </div>
           <button onClick={() => setTab("settings")} className="grid h-12 w-12 place-items-center rounded-lg bg-white text-genba shadow-soft" aria-label="メニュー">
@@ -1232,14 +1232,14 @@ export default function App() {
       )}
 
       {tab === "sites" && (
-        <CrudSection title="現場登録" icon={<Building2 />} sub="元請・担当者・作業内容をまとめます">
+        <CrudSection title="現場登録" icon={<Building2 />} sub="共有先・担当者・作業内容をまとめます">
           <form className="grid gap-3" onSubmit={async (e) => {
             e.preventDefault();
             await saveSiteFromForm(e.currentTarget);
           }}>
             <Field label="現場名" name="siteName" required />
             <Field label="現場住所" name="address" />
-            <Field label="元請会社名" name="clientCompany" />
+            <Field label="会社名 / 共有先" name="clientCompany" />
             <Field label="担当者名" name="clientPerson" />
             <Field label="担当者電話番号" name="clientPhone" />
             <Field label="工期開始日" name="startDate" type="date" />
@@ -1249,12 +1249,12 @@ export default function App() {
             <TextArea label="メモ" name="memo" />
             <SaveButton />
           </form>
-          <List items={sites.map((s) => [s.siteName, `${s.clientCompany || "元請未入力"} / ${yen.format(s.dailyRate || 0)}`])} />
+          <List items={sites.map((s) => [s.siteName, `${s.clientCompany || "会社未入力"} / ${yen.format(s.dailyRate || 0)}`])} />
         </CrudSection>
       )}
 
       {tab === "receipts" && (
-        <CrudSection title="領収書管理" icon={<Camera />} sub="撮る、確認する、経費にする">
+        <CrudSection title="領収書管理" icon={<Camera />} sub="撮る、確認する、会社へ共有する">
           <form key={editingReceipt?.id ?? "new-receipt"} className="grid gap-4" onSubmit={async (e) => {
             e.preventDefault();
             const form = e.currentTarget;
@@ -1299,7 +1299,7 @@ export default function App() {
             await saveRemote((id) => saveReceiptRemote(receipt, id));
             form.reset();
             setEditingReceiptId("");
-            setMessage(editingReceipt ? "領収書を更新しました" : "領収書を保存しました。カレンダーと経費一覧に反映しました");
+            setMessage(editingReceipt ? "領収書を更新しました" : "領収書を保存しました。カレンダーと領収書一覧に反映しました");
           }}>
             <FileInput label={editingReceipt ? "領収書写真（変更する時だけ選択）" : "領収書写真"} name="image" />
             {editingReceipt ? (
@@ -1338,7 +1338,7 @@ export default function App() {
                 {receiptPurposeOptions.map((category) => <option key={category}>{category}</option>)}
               </SelectField>
               <TextArea label="メモ" name="memo" defaultValue={editingReceipt?.memo ?? ""} />
-              <SelectField label="状態" name="status" defaultValue={editingReceipt?.status || "未処理"}><option value="未処理">まだ経費にしてない</option><option value="処理済み">経費にした</option></SelectField>
+              <SelectField label="状態" name="status" defaultValue={editingReceipt?.status || "未処理"}><option value="未処理">未処理</option><option value="処理済み">処理済み</option></SelectField>
               <details className="rounded-lg border border-line bg-white p-3">
                 <summary className="cursor-pointer text-sm font-bold text-genba">必要なら消費税も入れる</summary>
                 <div className="mt-3 grid gap-3">
@@ -1359,11 +1359,11 @@ export default function App() {
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="rounded-lg bg-skysoft p-3">
-              <p className="text-xs text-slate-600">今月の経費</p>
+              <p className="text-xs text-slate-600">今月の領収書合計</p>
               <p className="text-lg font-black">{yen.format(monthExpense)}</p>
             </div>
             <div className="rounded-lg bg-skysoft p-3">
-              <p className="text-xs text-slate-600">まだ経費にしてない</p>
+              <p className="text-xs text-slate-600">未処理</p>
               <p className="text-lg font-black">{unprocessedReceipts.length}枚</p>
             </div>
           </div>
@@ -1541,7 +1541,7 @@ export default function App() {
             ))}
           </div>
           <button onClick={() => { setUserEmail(""); setUserId(""); setHasRemoteSession(false); supabase?.auth.signOut(); }} className="tap w-full rounded-lg border border-line bg-white font-bold"><LogOut className="mr-2 inline" size={18} />ログアウト</button>
-          <p className="mt-5 rounded-lg bg-skysoft p-3 text-xs leading-6 text-slate-700">本サービスは、一人親方・職人向けの事務作業補助、書類整理、請求書・見積書作成、写真管理を目的としたサービスです。官公署への申請書類作成、許認可申請、法律判断を伴う業務、行政書士等の資格が必要な業務は対象外です。</p>
+          <p className="mt-5 rounded-lg bg-skysoft p-3 text-xs leading-6 text-slate-700">本サービスは、現場責任者・担当者向けに、担当現場の記録整理、書類整理、会社共有、請求書・見積書作成、写真管理を補助するサービスです。法的判断や許認可申請の代行は対象外です。</p>
         </Card>
       )}
 
@@ -2049,7 +2049,7 @@ function MoneySection({
 function PlanCards({ compact = false }: { compact?: boolean }) {
   const plans = [
     { name: "Starter", price: "4,980円", badge: "", features: ["現場10件まで", "領収書200枚まで", "請求書作成", "見積書作成", "PDF出力"] },
-    { name: "Professional", price: "9,980円", badge: "おすすめ / 一番人気 / 迷ったらこれ", features: ["現場無制限", "領収書無制限", "会社共有", "LINE連携", "写真メモ", "期限通知", "元請テンプレート", "優先サポート"] },
+    { name: "Professional", price: "9,980円", badge: "おすすめ / 一番人気 / 迷ったらこれ", features: ["現場無制限", "領収書無制限", "会社共有", "LINE連携", "写真メモ", "期限通知", "共有先テンプレート", "優先サポート"] },
     { name: "Business", price: "19,800円", badge: "", features: ["複数ユーザー", "従業員管理", "権限管理", "管理ダッシュボード", "電話サポート"] }
   ];
   return (

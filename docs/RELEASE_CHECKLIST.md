@@ -7,7 +7,7 @@
 - `supabase/migrations/003_drop_receipt_ocr_raw_text.sql` を適用し、`receipts.ocr_raw_text` が存在しない。
 - Storage bucket `genba-files` が private で作成済みである。
 - Storage policy が本人の `{user_id}/...` 配下だけを許可している。
-- Table Editorで `receipts` に OCR全文保存用の値が入らないことを確認する。
+- Table Editorで `receipts` に日付、金額、支払先、用途、メモ、画像パス、状態が入ることを確認する。
 - Authentication > URL Configuration の Site URL が `https://genba-jimu-assist.vercel.app` である。
 - Authentication > URL Configuration の Redirect URLs に `https://genba-jimu-assist.vercel.app` が含まれている。
 - パスワード再設定メール、Googleログイン、メール確認後の戻り先が localhost ではなく `https://genba-jimu-assist.vercel.app` になることを本番で確認する。
@@ -28,14 +28,13 @@
 - ユーザーBでログインしてもユーザーAのデータが見えない。
 - ユーザーBからユーザーAのStorage画像パスを直接参照しても見えない。
 
-## 4. 領収書OCR
+## 4. 領収書保存
 
-- スマホ実機で写真を選択し、「写真から読み取る」が動作する。
-- OCR後に確認フォームが表示される。
-- 日付、金額、店舗名、勘定科目、メモを修正して保存できる。
+- スマホ実機で写真を選択し、手入力フォームで保存できる。
+- 日付、金額、支払先、用途、メモを修正して保存できる。
 - 保存後、カレンダーと領収書一覧に反映される。
-- `receipts` に保存されるのは日付、金額、店舗名、勘定科目、メモ、画像パス、OCR状態であり、OCR全文は保存されない。
-- OCRが失敗した場合でも、手入力または写真だけ先に保存で業務を続けられる。
+- `receipts` に保存されるのは日付、金額、支払先、用途、メモ、画像パス、状態である。
+- 一覧から選択して編集、処理済み切替、削除ができる。
 
 ## 5. 自動確認
 

@@ -40,7 +40,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 
 - 日報を保存したら Supabase Table Editor > `work_logs` に行が増える
 - カレンダー予定を保存したら `calendar_schedules` に行が増える
-- 領収書を保存したら `receipts` に行が増え、`image_path` と保存項目（日付・金額・店舗名・勘定科目・メモ・OCR状態）が入る
+- 領収書を保存したら `receipts` に行が増え、`image_path` と保存項目（日付・金額・支払先・用途・メモ・状態）が入る
 - 領収書写真を保存したら Storage > `genba-files` > `{user_id}/receipts/` に画像が入る
 
 ## 4. Vercelに入れる環境変数

@@ -1,9 +1,9 @@
 export default function PrivacyPage() {
   return (
     <main className="mx-auto min-h-screen max-w-3xl bg-[#f7fbff] px-5 py-8 text-ink">
-      <a className="text-sm font-bold text-genba underline" href="/">親方の味方に戻る</a>
+      <a className="text-sm font-bold text-genba underline" href="/">現場事務アシストに戻る</a>
       <h1 className="mt-6 text-3xl font-black">プライバシーポリシー</h1>
-      <p className="mt-3 text-sm leading-7 text-slate-600">親方の味方は、業務データを大切に扱います。</p>
+      <p className="mt-3 text-sm leading-7 text-slate-600">現場事務アシストは、担当現場の業務データを大切に扱います。</p>
 
       <section className="mt-8 grid gap-5 text-sm leading-7">
         <div>

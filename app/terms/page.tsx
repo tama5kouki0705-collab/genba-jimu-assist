@@ -1,14 +1,14 @@
 export default function TermsPage() {
   return (
     <main className="mx-auto min-h-screen max-w-3xl bg-[#f7fbff] px-5 py-8 text-ink">
-      <a className="text-sm font-bold text-genba underline" href="/">親方の味方に戻る</a>
+      <a className="text-sm font-bold text-genba underline" href="/">現場事務アシストに戻る</a>
       <h1 className="mt-6 text-3xl font-black">利用規約</h1>
-      <p className="mt-3 text-sm leading-7 text-slate-600">この利用規約は、親方の味方を安心して使うための基本的な約束です。</p>
+      <p className="mt-3 text-sm leading-7 text-slate-600">この利用規約は、現場事務アシストを安心して使うための基本的な約束です。</p>
 
       <section className="mt-8 grid gap-5 text-sm leading-7">
         <div>
           <h2 className="text-lg font-black">1. サービス内容</h2>
-          <p className="mt-2">本サービスは、一人親方や小規模事業者のために、日報、カレンダー、領収書、請求書などの事務作業を補助します。</p>
+          <p className="mt-2">本サービスは、現場責任者や担当者のために、担当現場の日報、カレンダー、領収書、請求書などの記録整理と会社共有を補助します。</p>
         </div>
         <div>
           <h2 className="text-lg font-black">2. アカウント管理</h2>

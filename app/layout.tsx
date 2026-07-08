@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "親方の味方",
-  description: "現場が終わったら5分で事務が終わる、効率重視のAI事務アシスタント",
+  title: "現場事務アシスト",
+  description: "担当現場の記録を会社へ共有できる、現場責任者向けの記録アシスタント",
   manifest: "/manifest.json"
 };
 
