@@ -657,6 +657,8 @@ export default function App() {
       siteName: siteName || "現場予定",
       clientCompany,
       workDescription: String(fd.get("workDescription") || site?.workDescription || "現場作業").trim(),
+      startTime: String(fd.get("startTime") || "").trim(),
+      endTime: String(fd.get("endTime") || "").trim(),
       workers: String(fd.get("workers") || workerLabel).trim(),
       laborCount: num(fd.get("laborCount")) || 1,
       dailyRate,
@@ -845,6 +847,10 @@ export default function App() {
         <Field label="現場名" name="siteName" placeholder="例：渋谷マンション改修" />
         <Field label="請求先会社名" name="clientCompany" placeholder="例：山田建設" />
         <Field label="作業内容" name="workDescription" required placeholder="例：電気配線、器具付け" />
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="開始予定時刻" name="startTime" type="time" />
+          <Field label="終了予定時刻" name="endTime" type="time" />
+        </div>
         <Field label="作業員・応援者" name="workers" defaultValue={workerLabel} />
         <div className="grid grid-cols-2 gap-2">
           <Field label="人工数" name="laborCount" type="number" defaultValue={1} />
@@ -1077,7 +1083,9 @@ export default function App() {
                       <div className="min-w-0">
                         <span className={`rounded-lg px-2 py-1 text-xs font-bold ${calendarKindClass("予定")}`}>予定</span>
                         <p className="mt-2 break-words text-lg font-black">{schedule.siteName || "現場未入力"}</p>
-                        <p className="mt-1 break-words text-sm leading-6 text-slate-600">{schedule.workDescription} / {schedule.workers || "作業員未入力"}</p>
+                        <p className="mt-1 break-words text-sm leading-6 text-slate-600">
+                          {[schedule.startTime && `${schedule.startTime}${schedule.endTime ? `-${schedule.endTime}` : ""}`, schedule.workDescription, schedule.workers || "作業員未入力"].filter(Boolean).join(" / ")}
+                        </p>
                       </div>
                       <p className="shrink-0 rounded-lg bg-white px-3 py-2 text-sm font-black text-genba">{yen.format((schedule.laborCount || 1) * (schedule.dailyRate || 0))}</p>
                     </div>

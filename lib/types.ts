@@ -50,6 +50,7 @@ export type Receipt = {
   memo: string;
   status: "未処理" | "処理済み";
   ocrStatus: "未実行" | "読取待ち" | "完了";
+  submitted?: boolean;
 };
 
 export type WorkLog = {
@@ -73,6 +74,8 @@ export type CalendarSchedule = {
   siteName: string;
   clientCompany: string;
   workDescription: string;
+  startTime: string;
+  endTime: string;
   workers: string;
   laborCount: number;
   dailyRate: number;

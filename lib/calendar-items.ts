@@ -32,9 +32,10 @@ export function buildCalendarItems({
 
   calendarSchedules.forEach((schedule) => {
     const invoiceLabel = schedule.invoiceId ? "請求書下書きあり" : "請求書に回せます";
+    const timeLabel = schedule.startTime ? `${schedule.startTime}${schedule.endTime ? `-${schedule.endTime}` : ""} / ` : "";
     pushItem(schedule.date, {
       title: schedule.siteName || "予定",
-      sub: `${schedule.workDescription || "作業予定"} / ${schedule.workers || "作業員未入力"} / ${invoiceLabel}`,
+      sub: `${timeLabel}${schedule.workDescription || "作業予定"} / ${schedule.workers || "作業員未入力"} / ${invoiceLabel}`,
       kind: "予定"
     });
   });

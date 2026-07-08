@@ -53,6 +53,32 @@ export function datesBetween(startDate: string, endDate: string) {
   return dates;
 }
 
+function parseTimeToMinutes(time: string) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function formatMinutesAsTime(totalMinutes: number) {
+  const minutesInDay = 24 * 60;
+  const wrapped = ((totalMinutes % minutesInDay) + minutesInDay) % minutesInDay;
+  const hours = Math.floor(wrapped / 60);
+  const minutes = wrapped % 60;
+  return `${hours}:${String(minutes).padStart(2, "0")}`;
+}
+
+export function autoWorkTimes(startTime: string, endTime: string) {
+  const startMinutes = parseTimeToMinutes(startTime);
+  const endMinutes = parseTimeToMinutes(endTime);
+  return {
+    workStartTime: startMinutes === null ? "7:55" : formatMinutesAsTime(startMinutes - 5),
+    workEndTime: endMinutes === null ? "17:30" : formatMinutesAsTime(endMinutes + 30)
+  };
+}
+
 export function calendarKindClass(kind: CalendarItem["kind"]) {
   if (kind === "予定") return "bg-cyan-100 text-cyan-800";
   if (kind === "現場") return "bg-genba text-white";
