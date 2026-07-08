@@ -559,6 +559,45 @@ export default function App() {
     window.open(`https://maps.google.com/?q=${encodeURIComponent(address)}`, "_blank", "noopener,noreferrer");
   }
 
+  async function copyTextToClipboard(text: string, successMessage: string, failureMessage = "内容を手動でコピーしてください") {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        setMessage(successMessage);
+        return true;
+      }
+    } catch {
+      // Clipboard APIが使えない端末では下のtextarea方式へ落とす。
+    }
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      if (copied) {
+        setMessage(successMessage);
+        return true;
+      }
+    } catch {
+      // 最終的な案内は共通メッセージに寄せる。
+    }
+    setMessage(failureMessage);
+    return false;
+  }
+
+  async function copyTodayAddress() {
+    if (!todaySiteAddress) {
+      setMessage("住所が未登録です。現場情報に住所を入れてください");
+      return;
+    }
+    await copyTextToClipboard(todaySiteAddress, "住所をコピーしました", "住所をコピーできませんでした。現場情報から手動でコピーしてください");
+  }
+
   async function shareText(title: string, text: string, url?: string) {
     const copyText = url ? `${text}\n画像: ${url}` : text;
     try {
@@ -573,14 +612,7 @@ export default function App() {
         return false;
       }
     }
-    try {
-      await navigator.clipboard.writeText(copyText);
-      setMessage("共有内容をコピーしました");
-      return true;
-    } catch (error) {
-      setMessage("共有シートを開けませんでした。内容を手動でコピーしてください");
-      return false;
-    }
+    return copyTextToClipboard(copyText, "共有内容をコピーしました", "共有シートを開けませんでした。内容を手動でコピーしてください");
   }
 
   async function shareTodaySummary() {
@@ -1001,7 +1033,7 @@ export default function App() {
           <div className="grid gap-2">
             {[
               { label: "1. 今日の現場を見る", action: () => { setCalendarMonth(monthInput()); setSelectedCalendarDate(today); setCalendarAddFocus(!todayMainSchedule); setTab("calendar"); } },
-              { label: "2. 地図を開く", action: () => openMap(todaySiteAddress) },
+              { label: "2. 住所をコピー", action: copyTodayAddress },
               { label: "3. 日報を確認する", action: () => { setWorkLogDate(today); setTab("todayWork"); } },
               { label: "4. 領収書を保存", action: () => setTab("receipts") },
               { label: "5. 写真メモを追加", action: () => { setWorkLogDate(today); setTab("todayWork"); } },
