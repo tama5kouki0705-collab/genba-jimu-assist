@@ -50,7 +50,6 @@ import { INVOICE_LINE_ITEM_CATEGORIES, INVOICE_LINE_ITEM_UNITS, MAX_INVOICE_LINE
 import { STORAGE_ERROR_EVENT, STORAGE_LIMIT_MESSAGE, accountKey, getLocalAccounts, hashPassword, normalizeEmail, saveLocalAccounts, setLocalStorageItem, useStoredState } from "@/lib/local-state";
 import { buildPrintableDocumentHtml } from "@/lib/pdf-documents";
 import { receiptStatusLabel } from "@/lib/receipt-domain";
-import { RECEIPT_ACCOUNT_CATEGORIES, normalizeReceiptText, parseReceiptOcr, prepareReceiptImage, scoreReceiptOcr, type ReceiptOcrFields } from "@/lib/receipt-ocr";
 import type { AdminUser, CalendarSchedule, Estimate, Invoice, InvoiceLineItem, Plan, Profile, Qualification, Receipt, Site, Vehicle, WorkLog } from "@/lib/types";
 
 type Tab =
@@ -72,6 +71,7 @@ type Tab =
 const today = localDateInput();
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
 const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+const receiptPurposeOptions = ["材料費", "消耗品費", "交通費", "外注費", "通信費", "接待交際費", "その他"];
 
 function addDaysInput(dateInput: string, days: number) {
   const date = dateInput ? new Date(dateInput) : new Date();
@@ -199,10 +199,6 @@ export default function App() {
   const [hasRemoteSession, setHasRemoteSession] = useState(!hasSupabase);
   const [isAuthBusy, setIsAuthBusy] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
-  const [receiptOcrStatus, setReceiptOcrStatus] = useState("写真を選んでください");
-  const [receiptOcrText, setReceiptOcrText] = useState("");
-  const [receiptOcrFields, setReceiptOcrFields] = useState<ReceiptOcrFields | null>(null);
-  const [receiptConfirmVisible, setReceiptConfirmVisible] = useState(false);
   const [receiptFilter, setReceiptFilter] = useState<"all" | "unprocessed" | "processed">("all");
   const [editingReceiptId, setEditingReceiptId] = useState("");
   const [calendarMonth, setCalendarMonth] = useState(monthInput());
@@ -550,17 +546,19 @@ export default function App() {
     window.open(`https://maps.google.com/?q=${encodeURIComponent(address)}`, "_blank", "noopener,noreferrer");
   }
 
-  async function shareText(title: string, text: string) {
+  async function shareText(title: string, text: string, url?: string) {
     try {
       if (navigator.share) {
-        await navigator.share({ title, text });
+        await navigator.share({ title, text, url });
         setMessage("会社へ共有しました");
-        return;
+        return true;
       }
       await navigator.clipboard.writeText(text);
       setMessage("共有内容をコピーしました");
+      return true;
     } catch (error) {
       setMessage((error as Error).message || "共有を中止しました");
+      return false;
     }
   }
 
@@ -576,116 +574,26 @@ export default function App() {
       `領収書: ${todayReceipts.length}件`,
       `写真メモ: ${todayPhotoMemo}`
     ];
-    await shareText("今日の担当現場", lines.join("\n"));
+    const shared = await shareText("今日の担当現場", lines.join("\n"));
+    if (shared) setReceipts(receipts.map((receipt) => receipt.date === today ? { ...receipt, submitted: true } : receipt));
   }
 
-  async function readReceiptPhoto(form: HTMLFormElement | null) {
-    if (!form) return;
-    const imageInput = form.elements.namedItem("image") as HTMLInputElement | null;
-    const file = imageInput?.files?.[0] ?? null;
-    if (!file) {
-      setReceiptOcrStatus("先に領収書写真を選んでください");
-      return;
-    }
-
-    setReceiptOcrStatus("初回は準備に1分ほどかかります。次回から速くなります。写真を読み取り中です");
-    setReceiptOcrText("");
-    setReceiptOcrFields(null);
-    setReceiptConfirmVisible(false);
-    let worker: Awaited<ReturnType<typeof import("tesseract.js").createWorker>> | null = null;
-    try {
-      const { createWorker, PSM } = await import("tesseract.js");
-      const imageUrl = await prepareReceiptImage(file);
-      worker = await createWorker("jpn+eng", 1, {
-        logger: (message) => {
-          if (message.status === "recognizing text") {
-            setReceiptOcrStatus(`写真を読み取り中です。${Math.round(message.progress * 100)}%`);
-          }
-        }
-      });
-      await worker.setParameters({
-        preserve_interword_spaces: "1",
-        tessedit_pageseg_mode: PSM.AUTO,
-        user_defined_dpi: "300"
-      });
-      const firstResult = await worker.recognize(imageUrl);
-      let parsed = parseReceiptOcr(firstResult.data.text);
-      let rawText = firstResult.data.text;
-      if (scoreReceiptOcr(parsed) < 2) {
-        setReceiptOcrStatus("もう一度、細かい文字を探しています");
-        await worker.setParameters({
-          preserve_interword_spaces: "1",
-          tessedit_pageseg_mode: PSM.SPARSE_TEXT,
-          user_defined_dpi: "300"
-        });
-        const retryResult = await worker.recognize(imageUrl);
-        const retryParsed = parseReceiptOcr(retryResult.data.text);
-        if (scoreReceiptOcr(retryParsed) >= scoreReceiptOcr(parsed)) {
-          parsed = retryParsed;
-          rawText = retryResult.data.text;
-        }
-      }
-      const setValue = (name: string, value: string) => {
-        const field = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
-        if (field) field.value = value;
-      };
-      setValue("date", parsed.date);
-      setValue("storeName", parsed.storeName);
-      setValue("amount", parsed.amount ? String(parsed.amount) : "");
-      setValue("taxAmount", parsed.taxAmount ? String(parsed.taxAmount) : "");
-      setValue("purpose", parsed.purpose);
-      setValue("memo", parsed.memo);
-      setValue("ocrCompleted", "1");
-      setReceiptOcrFields(parsed);
-      setReceiptOcrText(normalizeReceiptText(rawText).slice(0, 320));
-      setReceiptConfirmVisible(true);
-      setReceiptOcrStatus(parsed.amount || parsed.storeName || parsed.date ? "読み取れた項目を自動入力しました。保存前に確認してください" : "文字は読み取りましたが、項目を判定できませんでした。手入力で補ってください");
-    } catch (error) {
-      setReceiptOcrStatus(`読み取りできませんでした：${(error as Error).message}`);
-      setReceiptConfirmVisible(true);
-    } finally {
-      await worker?.terminate();
-    }
-  }
-
-  async function quickSaveReceiptPhoto(form: HTMLFormElement | null) {
-    if (!form) return;
-    const fd = new FormData(form);
-    const file = (fd.get("image") as File) || null;
-    if (!file || !file.size) {
-      setReceiptOcrStatus("先に領収書写真を選んでください");
-      return;
-    }
-
-    const receiptId = uid("receipt");
-    let imageInfo: Pick<Receipt, "imageUrl" | "imagePath" | "imageMimeType" | "imageSize"> = { imageUrl: "" };
-    try {
-      imageInfo = await storeReceiptImage(file, receiptId);
-    } catch (error) {
-      setReceiptOcrStatus((error as Error).message);
-      return;
-    }
-    const receipt: Receipt = {
-      id: receiptId,
-      siteId: String(fd.get("siteId") || ""),
-      ...imageInfo,
-      date: String(fd.get("date") || today),
-      storeName: "あとで確認",
-      amount: 0,
-      taxAmount: 0,
-      purpose: "その他",
-      memo: "写真だけ先に保存",
-      status: "未処理" as const,
-      ocrStatus: "読取待ち" as const
-    };
-    setReceipts([receipt, ...receipts]);
-    await saveRemote((id) => saveReceiptRemote(receipt, id));
-    form.reset();
-    setReceiptOcrFields(null);
-    setReceiptOcrText("");
-    setReceiptConfirmVisible(false);
-    setReceiptOcrStatus("写真だけ先に保存しました。あとで確認できます");
-    setMessage("領収書を未処理一覧とカレンダーに入れました");
+  async function shareReceipt(receipt: Receipt) {
+    const site = sites.find((item) => item.id === receipt.siteId);
+    const lines = [
+      "領収書共有",
+      `現場: ${site?.siteName || "現場なし"}`,
+      `担当者: ${workerLabel}`,
+      `会社/所属: ${companyLabel}`,
+      `日付: ${receipt.date || "-"}`,
+      `支払先: ${receipt.storeName || "-"}`,
+      `金額: ${yen.format(receipt.amount || 0)}`,
+      `用途: ${receipt.purpose || "-"}`,
+      `状態: ${receiptStatusLabel(receipt.status)}`,
+      `メモ: ${receipt.memo || "-"}`
+    ];
+    const shared = await shareText("領収書共有", lines.join("\n"), receipt.imageUrl || undefined);
+    if (shared) setReceipts(receipts.map((item) => item.id === receipt.id ? { ...item, submitted: true } : item));
   }
 
   async function saveSiteFromForm(form: HTMLFormElement, successMessage = "現場を登録しました") {
@@ -788,19 +696,13 @@ export default function App() {
 
   function startReceiptEdit(receipt: Receipt) {
     setEditingReceiptId(receipt.id);
-    setReceiptOcrFields(null);
-    setReceiptOcrText("");
-    setReceiptConfirmVisible(true);
-    setReceiptOcrStatus("選択した領収書を編集できます");
+    setMessage("選択した領収書を編集できます");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function resetReceiptForm() {
     setEditingReceiptId("");
-    setReceiptOcrFields(null);
-    setReceiptOcrText("");
-    setReceiptConfirmVisible(false);
-    setReceiptOcrStatus("写真を選んでください");
+    setMessage("新しい領収書を入力できます");
   }
 
   async function toggleReceiptStatus(receipt: Receipt) {
@@ -1359,7 +1261,7 @@ export default function App() {
             const fd = new FormData(form);
             const imageFile = (fd.get("image") as File) || null;
             if ((!imageFile || !imageFile.size) && !editingReceipt?.imageUrl && !editingReceipt?.imagePath) {
-              setReceiptOcrStatus("先に領収書写真を選んでください");
+              setMessage("先に領収書画像を選んでください");
               return;
             }
             const receiptId = editingReceipt?.id ?? uid("receipt");
@@ -1379,7 +1281,6 @@ export default function App() {
                 return;
               }
             }
-            const ocrCompleted = String(fd.get("ocrCompleted") || "") === "1";
             const receipt: Receipt = {
               id: receiptId,
               siteId: String(fd.get("siteId") || ""),
@@ -1391,63 +1292,50 @@ export default function App() {
               purpose: String(fd.get("purpose") || "その他"),
               memo: String(fd.get("memo") || "").trim(),
               status: String(fd.get("status") || "未処理") as "未処理" | "処理済み",
-              ocrStatus: ocrCompleted ? "完了" as const : editingReceipt?.ocrStatus ?? "未実行" as const
+              ocrStatus: "未実行" as const,
+              submitted: editingReceipt?.submitted ?? false
             };
             setReceipts([receipt, ...receipts.filter((item) => item.id !== receipt.id)]);
             await saveRemote((id) => saveReceiptRemote(receipt, id));
             form.reset();
             setEditingReceiptId("");
-            setReceiptOcrStatus("写真を選んでください");
-            setReceiptOcrText("");
-            setReceiptOcrFields(null);
-            setReceiptConfirmVisible(false);
             setMessage(editingReceipt ? "領収書を更新しました" : "領収書を保存しました。カレンダーと経費一覧に反映しました");
           }}>
             <FileInput label={editingReceipt ? "領収書写真（変更する時だけ選択）" : "領収書写真"} name="image" />
-            <input type="hidden" name="ocrCompleted" defaultValue={editingReceipt?.ocrStatus === "完了" ? "1" : ""} />
             {editingReceipt ? (
               <div className="rounded-lg border border-genba bg-skysoft p-4">
                 <p className="text-sm font-black text-genba">編集中の領収書</p>
                 <p className="mt-1 text-sm text-slate-700">{editingReceipt.date || "日付なし"} / {editingReceipt.storeName || "店名なし"} / {yen.format(editingReceipt.amount || 0)}</p>
               </div>
             ) : null}
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {editingReceipt ? (
                 <button type="button" onClick={resetReceiptForm} className="tap min-h-12 rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">新規入力に戻る</button>
-              ) : (
-                <button type="button" onClick={(e) => quickSaveReceiptPhoto(e.currentTarget.form)} className="tap min-h-12 rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">写真だけ先に保存</button>
-              )}
-              <button type="button" onClick={(e) => readReceiptPhoto(e.currentTarget.form)} className="tap min-h-12 rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">写真から読み取る</button>
-              <button type="button" onClick={() => { setReceiptConfirmVisible(true); setReceiptOcrStatus("空欄に入力して保存できます"); }} className="tap min-h-12 rounded-lg border border-line bg-white px-3 py-3 text-sm font-bold text-slate-700">手入力で確認</button>
+              ) : null}
+              <p className="rounded-lg bg-skysoft p-3 text-sm font-bold text-slate-700">画像を選び、金額と用途を入力して保存します。</p>
             </div>
-            <p className="rounded-lg bg-skysoft p-4 text-sm font-semibold leading-6 text-slate-700">{receiptOcrStatus}</p>
-            <div className={receiptConfirmVisible ? "grid gap-3 rounded-lg border border-genba bg-white p-4" : "hidden"}>
+            <div className="grid gap-3 rounded-lg border border-genba bg-white p-4">
               <div>
-                <p className="text-sm font-black text-genba">確認して保存</p>
-                <p className="mt-1 text-xs leading-5 text-slate-600">読み取れたところだけ入っています。違うところはここで直してください。</p>
+                <p className="text-sm font-black text-genba">領収書を保存</p>
+                <p className="mt-1 text-xs leading-5 text-slate-600">担当者と会社名はプロフィールから自動で付きます。</p>
               </div>
-              {receiptOcrFields ? (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-2 gap-2">
                 {[
-                  ["店舗名 / 支払先", receiptOcrFields.storeName || "空欄"],
-                  ["日付", receiptOcrFields.date || "確認してください"],
-                  ["金額", receiptOcrFields.amount ? yen.format(receiptOcrFields.amount) : "確認してください"],
-                  ["勘定科目", receiptOcrFields.purpose],
-                  ["メモ", receiptOcrFields.memo || "空欄"]
+                  ["担当者", workerLabel],
+                  ["会社/所属", companyLabel]
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-lg bg-skysoft p-3">
                     <p className="text-xs font-bold text-genba">{label}</p>
                     <p className="mt-1 break-words text-base font-black text-ink">{value}</p>
                   </div>
                 ))}
-                </div>
-              ) : null}
+              </div>
               <SiteSelect sites={sites} defaultValue={editingReceipt?.siteId} />
               <Field label="日付" name="date" type="date" defaultValue={editingReceipt?.date ?? ""} />
               <Field label="金額" name="amount" type="number" defaultValue={editingReceipt?.amount ?? ""} />
               <Field label="店舗名 / 支払先" name="storeName" defaultValue={editingReceipt?.storeName ?? ""} />
-              <SelectField label="勘定科目" name="purpose" defaultValue={editingReceipt?.purpose || "その他"}>
-                {RECEIPT_ACCOUNT_CATEGORIES.map((category) => <option key={category}>{category}</option>)}
+              <SelectField label="用途" name="purpose" defaultValue={editingReceipt?.purpose || "その他"}>
+                {receiptPurposeOptions.map((category) => <option key={category}>{category}</option>)}
               </SelectField>
               <TextArea label="メモ" name="memo" defaultValue={editingReceipt?.memo ?? ""} />
               <SelectField label="状態" name="status" defaultValue={editingReceipt?.status || "未処理"}><option value="未処理">まだ経費にしてない</option><option value="処理済み">経費にした</option></SelectField>
@@ -1457,12 +1345,6 @@ export default function App() {
                   <Field label="消費税" name="taxAmount" type="number" defaultValue={editingReceipt?.taxAmount ?? ""} />
                 </div>
               </details>
-              {receiptOcrText ? (
-                <details className="rounded-lg border border-line bg-white p-3 text-xs leading-5 text-slate-600">
-                  <summary className="cursor-pointer font-bold text-ink">読み取った文字の一部を見る</summary>
-                  <p className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap">{receiptOcrText}</p>
-                </details>
-              ) : null}
               <SaveButton label="確認した内容で保存" />
             </div>
           </form>
@@ -1497,6 +1379,7 @@ export default function App() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-lg px-2 py-1 text-xs font-bold ${receipt.status === "未処理" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{receiptStatusLabel(receipt.status)}</span>
+                        {receipt.submitted ? <span className="rounded-lg bg-genba px-2 py-1 text-xs font-bold text-white">提出済み</span> : null}
                         <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{receipt.purpose || "用途未入力"}</span>
                       </div>
                       <p className="mt-2 break-words font-black">{receipt.storeName || "領収書"}</p>
@@ -1504,9 +1387,10 @@ export default function App() {
                       <p className="mt-1 text-xl font-black text-genba">{yen.format(receipt.amount)}</p>
                     </div>
                   </div>
-                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
                     <button type="button" onClick={() => startReceiptEdit(receipt)} className="tap min-h-12 rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">編集</button>
                     <button type="button" onClick={() => toggleReceiptStatus(receipt)} className="tap min-h-12 rounded-lg bg-skysoft px-3 py-3 text-sm font-bold text-genba">{receipt.status === "未処理" ? "処理済み" : "未処理へ"}</button>
+                    <button type="button" onClick={() => shareReceipt(receipt)} className="tap min-h-12 rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">会社へ共有</button>
                     <button type="button" onClick={() => deleteReceipt(receipt.id)} className="tap min-h-12 rounded-lg border border-red-200 bg-white px-3 py-3 text-sm font-bold text-red-700">削除</button>
                   </div>
                 </div>
@@ -2165,7 +2049,7 @@ function MoneySection({
 function PlanCards({ compact = false }: { compact?: boolean }) {
   const plans = [
     { name: "Starter", price: "4,980円", badge: "", features: ["現場10件まで", "領収書200枚まで", "請求書作成", "見積書作成", "PDF出力"] },
-    { name: "Professional", price: "9,980円", badge: "おすすめ / 一番人気 / 迷ったらこれ", features: ["現場無制限", "領収書無制限", "AI OCR", "LINE連携", "音声入力", "期限通知", "元請テンプレート", "優先サポート"] },
+    { name: "Professional", price: "9,980円", badge: "おすすめ / 一番人気 / 迷ったらこれ", features: ["現場無制限", "領収書無制限", "会社共有", "LINE連携", "写真メモ", "期限通知", "元請テンプレート", "優先サポート"] },
     { name: "Business", price: "19,800円", badge: "", features: ["複数ユーザー", "従業員管理", "権限管理", "管理ダッシュボード", "電話サポート"] }
   ];
   return (

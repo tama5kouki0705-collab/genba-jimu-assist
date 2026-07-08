@@ -16,7 +16,7 @@ export default function TermsPage() {
         </div>
         <div>
           <h2 className="text-lg font-black">3. 保存データ</h2>
-          <p className="mt-2">入力した日報、予定、領収書画像、OCRで抽出した保存項目などは、利用者本人の業務管理のために保存されます。</p>
+          <p className="mt-2">入力した日報、予定、領収書画像、保存項目などは、担当現場の業務管理と会社共有のために保存されます。</p>
         </div>
         <div>
           <h2 className="text-lg font-black">4. 禁止事項</h2>

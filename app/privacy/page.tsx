@@ -8,7 +8,7 @@ export default function PrivacyPage() {
       <section className="mt-8 grid gap-5 text-sm leading-7">
         <div>
           <h2 className="text-lg font-black">1. 取得する情報</h2>
-          <p className="mt-2">メールアドレス、日報、カレンダー予定、領収書画像、OCRで抽出した保存項目、請求書や見積書に必要な情報を取得します。</p>
+          <p className="mt-2">メールアドレス、日報、カレンダー予定、領収書画像、保存項目、請求書や見積書に必要な情報を取得します。</p>
         </div>
         <div>
           <h2 className="text-lg font-black">2. 利用目的</h2>
@@ -23,8 +23,8 @@ export default function PrivacyPage() {
           <p className="mt-2">領収書画像などのファイルは、本人のアカウントに紐づく非公開ストレージに保存します。</p>
         </div>
         <div>
-          <h2 className="text-lg font-black">5. OCR情報</h2>
-          <p className="mt-2">領収書OCRでは、日付、金額、店舗名、勘定科目、メモなど、確認後に保存する項目を扱います。読み取った全文は保存しません。</p>
+          <h2 className="text-lg font-black">5. 領収書情報</h2>
+          <p className="mt-2">領収書では、画像、日付、金額、支払先、用途、メモなど、確認後に保存する項目を扱います。</p>
         </div>
         <div>
           <h2 className="text-lg font-black">6. 第三者提供</h2>
