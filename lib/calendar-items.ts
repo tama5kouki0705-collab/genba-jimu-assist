@@ -12,6 +12,7 @@ type CalendarItemInput = {
   qualifications: Qualification[];
   vehicles: Vehicle[];
   formatCurrency: (amount: number) => string;
+  billingEnabled?: boolean;
 };
 
 export function buildCalendarItems({
@@ -23,7 +24,8 @@ export function buildCalendarItems({
   estimates,
   qualifications,
   vehicles,
-  formatCurrency
+  formatCurrency,
+  billingEnabled = true
 }: CalendarItemInput) {
   const items: CalendarItem[] = [];
   const pushItem = (date: string, item: Omit<CalendarItem, "date">) => {
@@ -31,11 +33,11 @@ export function buildCalendarItems({
   };
 
   calendarSchedules.forEach((schedule) => {
-    const invoiceLabel = schedule.invoiceId ? "請求書下書きあり" : "請求書に回せます";
+    const invoiceLabel = billingEnabled ? schedule.invoiceId ? "請求書下書きあり" : "請求書に回せます" : "";
     const timeLabel = schedule.startTime ? `${schedule.startTime}${schedule.endTime ? `-${schedule.endTime}` : ""} / ` : "";
     pushItem(schedule.date, {
       title: schedule.siteName || "予定",
-      sub: `${timeLabel}${schedule.workDescription || "作業予定"} / ${schedule.workers || "作業員未入力"} / ${invoiceLabel}`,
+      sub: [timeLabel ? timeLabel.slice(0, -3) : "", schedule.workDescription || "作業予定", schedule.workers || "作業員未入力", invoiceLabel].filter(Boolean).join(" / "),
       kind: "予定"
     });
   });

@@ -85,6 +85,8 @@ const today = localDateInput();
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
 const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
 const receiptPurposeOptions = ["材料", "工具・道具", "交通", "駐車場", "高速", "燃料", "消耗品", "外注", "その他"];
+// 請求書・見積書機能。復活手順：この値をtrueに戻すだけ。関連コードは lib/invoice-workflow.ts / lib/pdf-documents.ts / page.tsx の MoneySection。
+const ENABLE_BILLING = false;
 
 function addDaysInput(dateInput: string, days: number) {
   const date = dateInput ? new Date(dateInput) : new Date();
@@ -236,6 +238,10 @@ export default function App() {
   }, [calendarAddFocus, tab]);
 
   useEffect(() => {
+    if (!ENABLE_BILLING && (tab === "invoices" || tab === "estimates")) setTab("home");
+  }, [tab]);
+
+  useEffect(() => {
     if (!supabase) {
       setAuthReady(true);
       return;
@@ -299,8 +305,8 @@ export default function App() {
 
   const currentSite = sites[0];
   const todayWorkLog = workLogs.find((log) => log.date === today);
-  const todayWorkProgress = [todayWorkLog?.memo, todayWorkLog?.receiptDone, todayWorkLog?.photoDone, todayWorkLog?.invoiceReady].filter(Boolean).length;
-  const monthSales = invoices.filter((invoice) => invoice.status === "入金済み" && isCurrentMonth(invoice.issueDate ?? "")).reduce((sum, invoice) => sum + invoice.totalAmount, 0);
+  const todayWorkProgress = [todayWorkLog?.memo, todayWorkLog?.receiptDone, todayWorkLog?.photoDone, ...(ENABLE_BILLING ? [todayWorkLog?.invoiceReady] : [])].filter(Boolean).length;
+  const monthSales = ENABLE_BILLING ? invoices.filter((invoice) => invoice.status === "入金済み" && isCurrentMonth(invoice.issueDate ?? "")).reduce((sum, invoice) => sum + invoice.totalAmount, 0) : 0;
   const unprocessedReceipts = receipts.filter((r) => r.status === "未処理");
   const monthExpense = receipts.filter((receipt) => isCurrentMonth(receipt.date)).reduce((sum, receipt) => sum + receipt.amount, 0);
   const filteredReceipts = receipts.filter((receipt) => {
@@ -314,11 +320,12 @@ export default function App() {
     sites,
     receipts,
     workLogs,
-    invoices,
-    estimates,
+    invoices: ENABLE_BILLING ? invoices : [],
+    estimates: ENABLE_BILLING ? estimates : [],
     qualifications,
     vehicles,
-    formatCurrency: (amount) => yen.format(amount)
+    formatCurrency: (amount) => yen.format(amount),
+    billingEnabled: ENABLE_BILLING
   }), [calendarSchedules, estimates, invoices, qualifications, receipts, sites, vehicles, workLogs]);
   const selectedCalendarItems = calendarItems.filter((item) => item.date === selectedCalendarDate);
   const selectedOtherCalendarItems = selectedCalendarItems.filter((item) => item.kind !== "予定");
@@ -330,7 +337,8 @@ export default function App() {
   const selectedDateSchedules = calendarSchedules.filter((item) => item.date === selectedCalendarDate);
   const todayMainSchedule = todaySchedules[0];
   const activeWorkLog = workLogs.find((log) => log.date === workLogDate);
-  const activeWorkProgress = [activeWorkLog?.memo, activeWorkLog?.receiptDone, activeWorkLog?.photoDone, activeWorkLog?.invoiceReady].filter(Boolean).length;
+  const activeWorkProgress = [activeWorkLog?.memo, activeWorkLog?.receiptDone, activeWorkLog?.photoDone, ...(ENABLE_BILLING ? [activeWorkLog?.invoiceReady] : [])].filter(Boolean).length;
+  const activeWorkProgressTotal = ENABLE_BILLING ? 4 : 3;
   const activeWorkSchedule = calendarSchedules.find((item) => item.date === workLogDate);
   const activeWorkSite = activeWorkSchedule ? sites.find((site) => site.id === activeWorkSchedule.siteId) : undefined;
   const activeWorkTimes = autoWorkTimes(activeWorkSchedule?.startTime || "", activeWorkSchedule?.endTime || "");
@@ -345,6 +353,12 @@ export default function App() {
   const todaySiteAddress = todayScheduleSite?.address || currentSite?.address || "";
   const todayPhotoMemo = todayWorkLog?.photoUrls.length ? `写真 ${todayWorkLog.photoUrls.length}枚を保存済み` : "写真メモはまだありません";
   const todayWorkDraft = todayWorkLog?.memo || todayMainSchedule?.workDescription || "日報下書きはまだありません";
+  const homeStats = [
+    ["今日の予定", `${todaySchedules.length}件`],
+    ["今日の領収書", `${todayReceipts.length}件`],
+    ["未処理の領収書", `${unprocessedReceipts.length}枚`],
+    ...(ENABLE_BILLING ? [["今月の売上", yen.format(monthSales)]] : [])
+  ];
   // TODO: 将来 Supabase pg_cron + Edge Function + Web Push で7:00/開始1時間前/15:00/17:00を実配信する。今回はアプリ内通知だけ。
   const notificationItems = [
     ...todaySchedules.map((schedule) => ({
@@ -375,8 +389,8 @@ export default function App() {
 
   const documentRows = useMemo(
     () => [
-      ...invoices.map((item) => ({ type: "請求書", title: item.clientCompany, status: item.status, siteId: item.siteId })),
-      ...estimates.map((item) => ({ type: "見積書", title: item.clientCompany, status: item.status, siteId: item.siteId })),
+      ...(ENABLE_BILLING ? invoices.map((item) => ({ type: "請求書", title: item.clientCompany, status: item.status, siteId: item.siteId })) : []),
+      ...(ENABLE_BILLING ? estimates.map((item) => ({ type: "見積書", title: item.clientCompany, status: item.status, siteId: item.siteId })) : []),
       ...receipts.map((item) => ({ type: "領収書", title: item.storeName, status: item.status, siteId: item.siteId })),
       ...qualifications.map((item) => ({ type: "資格証", title: item.qualificationName, status: daysLeft(item.expiryDate) < 0 ? "期限切れ" : "保管中", siteId: "" })),
       ...vehicles.map((item) => ({ type: "車両書類", title: item.vehicleName, status: daysLeft(item.inspectionExpiryDate) < 0 ? "期限切れ" : "保管中", siteId: "" }))
@@ -731,7 +745,7 @@ export default function App() {
       photoUrls: [...(existing?.photoUrls ?? []), ...newPhotos].slice(0, 12),
       receiptDone: fd.get("receiptDone") === "on",
       photoDone: fd.get("photoDone") === "on",
-      invoiceReady: fd.get("invoiceReady") === "on",
+      invoiceReady: ENABLE_BILLING ? fd.get("invoiceReady") === "on" : existing?.invoiceReady ?? false,
       createdAt: existing?.createdAt ?? new Date().toISOString()
     };
     setWorkLogs([workLog, ...workLogs.filter((log) => log.id !== workLog.id)]);
@@ -804,6 +818,7 @@ export default function App() {
   }
 
   async function createInvoiceFromSchedule(schedule: CalendarSchedule) {
+    if (!ENABLE_BILLING) return;
     const site = sites.find((item) => item.id === schedule.siteId);
     const invoice = createInvoiceDraftFromSchedule(schedule, site, uid("invoice"), today);
     const updatedSchedule = { ...schedule, invoiceId: invoice.id };
@@ -818,6 +833,7 @@ export default function App() {
   }
 
   async function createInvoiceFromWorkLog(log: WorkLog) {
+    if (!ENABLE_BILLING) return;
     const site = sites.find((item) => item.id === log.siteId);
     const schedule = calendarSchedules.find((item) => item.date === log.date && (!log.siteId || item.siteId === log.siteId));
     const invoice = createInvoiceDraftFromWorkLog(log, site, schedule, uid("invoice"), today);
@@ -911,10 +927,10 @@ export default function App() {
     ["home", "ホーム", <Home key="home" size={22} />],
     ["calendar", "カレンダー", <CalendarDays key="calendar" size={22} />],
     ["receipts", "領収書", <Camera key="receipts" size={22} />],
-    ["invoices", "請求書", <FileText key="invoices" size={22} />],
+    ...(ENABLE_BILLING ? [["invoices", "請求書", <FileText key="invoices" size={22} />] as [Tab, string, React.ReactNode]] : []),
     ["settings", "設定", <Settings key="settings" size={22} />],
     ["sites", "現場", <Building2 key="sites" size={22} />],
-    ["estimates", "見積書", <ClipboardList key="estimates" size={22} />],
+    ...(ENABLE_BILLING ? [["estimates", "見積書", <ClipboardList key="estimates" size={22} />] as [Tab, string, React.ReactNode]] : []),
     ["qualifications", "資格証", <IdCard key="qualifications" size={22} />],
     ["vehicles", "車両", <Car key="vehicles" size={22} />],
     ["documents", "書類", <FileDown key="documents" size={22} />],
@@ -1048,12 +1064,7 @@ export default function App() {
 
           <Card>
             <div className="grid grid-cols-2 gap-3">
-              {[
-                ["今日の予定", `${todaySchedules.length}件`],
-                ["今日の領収書", `${todayReceipts.length}件`],
-                ["未処理の領収書", `${unprocessedReceipts.length}枚`],
-                ["今月の売上", yen.format(monthSales)]
-              ].map(([label, value]) => (
+              {homeStats.map(([label, value]) => (
                 <div key={label} className="rounded-lg bg-skysoft p-3">
                   <p className="text-xs text-slate-500">{label}</p>
                   <p className="mt-1 text-xl font-black">{value}</p>
@@ -1088,7 +1099,7 @@ export default function App() {
           <Card className="bg-genba text-white">
             <p className="text-sm opacity-90">日報記入</p>
             <h2 className="mt-1 text-2xl font-black">{workLogDate}</h2>
-            <p className="mt-2 text-sm opacity-90">{activeWorkLog ? `片付け ${activeWorkProgress}/4 まで完了` : activeWorkSchedule ? "カレンダー予定から日報を書けます" : "現場終わりにここだけ残せばOK"}</p>
+            <p className="mt-2 text-sm opacity-90">{activeWorkLog ? `片付け ${activeWorkProgress}/${activeWorkProgressTotal} まで完了` : activeWorkSchedule ? "カレンダー予定から日報を書けます" : "現場終わりにここだけ残せばOK"}</p>
           </Card>
 
           <Card>
@@ -1130,7 +1141,7 @@ export default function App() {
                 {[
                   ["receiptDone", "領収書を撮った", activeWorkLog?.receiptDone],
                   ["photoDone", "現場写真を残した", activeWorkLog?.photoDone],
-                  ["invoiceReady", "請求書に回せる", activeWorkLog?.invoiceReady]
+                  ...(ENABLE_BILLING ? [["invoiceReady", "請求書に回せる", activeWorkLog?.invoiceReady]] : [])
                 ].map(([name, label, checked]) => (
                   <label key={String(name)} className="flex items-center gap-3 rounded-lg bg-skysoft p-3 text-sm font-bold text-ink">
                     <input name={String(name)} type="checkbox" defaultChecked={Boolean(checked)} className="h-5 w-5 accent-[#176B87]" />
@@ -1155,7 +1166,7 @@ export default function App() {
               ) : null}
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button onClick={() => setTab("receipts")} className="tap rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">領収書を撮る</button>
-                <button onClick={() => createInvoiceFromWorkLog(activeWorkLog)} className="tap rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">請求書に回す</button>
+                {ENABLE_BILLING ? <button onClick={() => createInvoiceFromWorkLog(activeWorkLog)} className="tap rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">請求書に回す</button> : null}
               </div>
             </Card>
           ) : null}
@@ -1230,9 +1241,9 @@ export default function App() {
                       </div>
                       <p className="shrink-0 rounded-lg bg-white px-3 py-2 text-sm font-black text-genba">{yen.format((schedule.laborCount || 1) * (schedule.dailyRate || 0))}</p>
                     </div>
-                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div className={`mt-3 grid grid-cols-1 gap-2 ${ENABLE_BILLING ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
                       <button type="button" onClick={() => { setWorkLogDate(schedule.date); setTab("todayWork"); }} className="tap min-h-12 rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">日報を書く</button>
-                      <button type="button" onClick={() => createInvoiceFromSchedule(schedule)} className="tap min-h-12 rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">{schedule.invoiceId ? "請求書を再作成" : "請求書に回す"}</button>
+                      {ENABLE_BILLING ? <button type="button" onClick={() => createInvoiceFromSchedule(schedule)} className="tap min-h-12 rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">{schedule.invoiceId ? "請求書を再作成" : "請求書に回す"}</button> : null}
                       <button type="button" onClick={() => deleteCalendarSchedule(schedule.id)} className="tap min-h-12 rounded-lg border border-red-200 bg-white px-3 py-3 text-sm font-bold text-red-700">削除</button>
                     </div>
                   </div>
@@ -1263,7 +1274,7 @@ export default function App() {
 
       {tab === "profile" && (
         <Card>
-          <SectionTitle icon={<UserRound />} title="プロフィール登録" sub="請求書・見積書に自動で入ります" />
+          <SectionTitle icon={<UserRound />} title="プロフィール登録" sub={ENABLE_BILLING ? "請求書・見積書に自動で入ります" : "担当者名・会社名として記録と共有に使います"} />
           <form
             className="grid gap-3"
             onSubmit={async (e) => {
@@ -1484,11 +1495,11 @@ export default function App() {
         </CrudSection>
       )}
 
-      {tab === "invoices" && (
+      {ENABLE_BILLING && tab === "invoices" && (
         <MoneySection type="invoice" sites={sites} profile={profile} items={invoices} setItems={setInvoices} downloadPdf={downloadPdf} saveRemote={saveRemote} />
       )}
 
-      {tab === "estimates" && (
+      {ENABLE_BILLING && tab === "estimates" && (
         <MoneySection type="estimate" sites={sites} profile={profile} items={estimates} setItems={setEstimates} downloadPdf={downloadPdf} saveRemote={saveRemote} />
       )}
 
@@ -1566,7 +1577,7 @@ export default function App() {
           <SectionTitle icon={<FileDown />} title="書類一覧" sub="現場別・種類別・状態別に探せます" />
           <div className="grid grid-cols-2 gap-2">
             <select className="tap rounded-lg border border-line px-3"><option>すべての現場</option>{sites.map((s) => <option key={s.id}>{s.siteName}</option>)}</select>
-            <select className="tap rounded-lg border border-line px-3"><option>すべての種類</option><option>請求書</option><option>見積書</option><option>領収書</option><option>資格証</option><option>車両書類</option></select>
+            <select className="tap rounded-lg border border-line px-3"><option>すべての種類</option>{ENABLE_BILLING ? <option>請求書</option> : null}{ENABLE_BILLING ? <option>見積書</option> : null}<option>領収書</option><option>資格証</option><option>車両書類</option></select>
           </div>
           <List items={documentRows.map((d) => [`${d.type}：${d.title}`, d.status])} />
         </Card>
@@ -1579,8 +1590,8 @@ export default function App() {
             {[
               ["ユーザー数", `${adminUsers.length}人`],
               ["領収書枚数", `${receipts.length}枚`],
-              ["請求書作成数", `${invoices.length}件`],
-              ["見積書作成数", `${estimates.length}件`],
+              ...(ENABLE_BILLING ? [["請求書作成数", `${invoices.length}件`]] : []),
+              ...(ENABLE_BILLING ? [["見積書作成数", `${estimates.length}件`]] : []),
               ["資格証登録数", `${qualifications.length}件`],
               ["車両登録数", `${vehicles.length}件`]
             ].map(([label, value]) => <Card key={label}><p className="text-xs text-slate-500">{label}</p><p className="text-xl font-black">{value}</p></Card>)}
@@ -1615,7 +1626,7 @@ export default function App() {
           <div className="mb-3 grid grid-cols-2 gap-2">
             {[
               ["sites", "現場"],
-              ["estimates", "見積書"],
+              ...(ENABLE_BILLING ? [["estimates", "見積書"]] : []),
               ["qualifications", "資格証"],
               ["vehicles", "車両"],
               ["documents", "書類一覧"],
@@ -1625,7 +1636,7 @@ export default function App() {
             ))}
           </div>
           <button onClick={() => { setUserEmail(""); setUserId(""); setHasRemoteSession(false); supabase?.auth.signOut(); }} className="tap w-full rounded-lg border border-line bg-white font-bold"><LogOut className="mr-2 inline" size={18} />ログアウト</button>
-          <p className="mt-5 rounded-lg bg-skysoft p-3 text-xs leading-6 text-slate-700">本サービスは、現場責任者・担当者向けに、担当現場の記録整理、書類整理、会社共有、請求書・見積書作成、写真管理を補助するサービスです。法的判断や許認可申請の代行は対象外です。</p>
+          <p className="mt-5 rounded-lg bg-skysoft p-3 text-xs leading-6 text-slate-700">{ENABLE_BILLING ? "本サービスは、現場責任者・担当者向けに、担当現場の記録整理、書類整理、会社共有、請求書・見積書作成、写真管理を補助するサービスです。法的判断や許認可申請の代行は対象外です。" : "本サービスは、現場責任者・担当者向けに、担当現場の記録整理、書類整理、会社共有、写真管理を補助するサービスです。法的判断や許認可申請の代行は対象外です。"}</p>
         </Card>
       )}
 
@@ -2132,7 +2143,7 @@ function MoneySection({
 
 function PlanCards({ compact = false }: { compact?: boolean }) {
   const plans = [
-    { name: "Starter", price: "4,980円", badge: "", features: ["現場10件まで", "領収書200枚まで", "請求書作成", "見積書作成", "PDF出力"] },
+    { name: "Starter", price: "4,980円", badge: "", features: ["現場10件まで", "領収書200枚まで", ...(ENABLE_BILLING ? ["請求書作成", "見積書作成"] : []), "PDF出力"] },
     { name: "Professional", price: "9,980円", badge: "おすすめ / 一番人気 / 迷ったらこれ", features: ["現場無制限", "領収書無制限", "会社共有", "LINE連携", "写真メモ", "期限通知", "共有先テンプレート", "優先サポート"] },
     { name: "Business", price: "19,800円", badge: "", features: ["複数ユーザー", "従業員管理", "権限管理", "管理ダッシュボード", "電話サポート"] }
   ];
