@@ -64,13 +64,15 @@ test("buildPrintableDocumentHtml creates receipt list document and escapes unsaf
     title: "領収書一覧",
     issuerName: "山田電工",
     rows: [
-      [`<script>alert("x")</script>`, "2026-07-06 / ￥2,200 / 未処理"],
-      ["コーナン", "2026-07-06 / ￥3,300 / 処理済み"]
+      ["2026-07-06", `<script>alert("x")</script>`, "￥2,200"],
+      ["2026-07-07", "材料", "￥3,300"]
     ]
   });
 
   assert.match(html, /領収書一覧/);
+  assert.match(html, /<th>日付<\/th><th>名目<\/th><th>金額<\/th>/);
   assert.match(html, /&lt;script&gt;alert\(&quot;x&quot;\)&lt;\/script&gt;/);
   assert.doesNotMatch(html, /<script>alert/);
-  assert.match(html, /コーナン/);
+  assert.match(html, /合計 2件/);
+  assert.match(html, /￥5,500/);
 });

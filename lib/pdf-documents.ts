@@ -3,11 +3,11 @@ import { escapeHtml } from "./security.ts";
 
 export type PrintableDocumentInput = {
   title: string;
-  rows: Array<[string, string]>;
+  rows: Array<[string, string] | [string, string, string]>;
   issuerName?: string;
 };
 
-function rowsToValues(rows: Array<[string, string]>) {
+function rowsToValues(rows: Array<[string, string] | [string, string, string]>) {
   return Object.fromEntries(rows.map(([key, value]) => [key, value || ""]));
 }
 
@@ -168,7 +168,57 @@ ${commonStyles()}
 </html>`;
 }
 
+function parseCurrency(value: string) {
+  return Number(value.replace(/[^\d.-]/g, "")) || 0;
+}
+
+function buildReceiptListDocumentHtml({ title, rows, issuerName = "" }: PrintableDocumentInput) {
+  const receiptRows = rows.map((row) => ({
+    date: row[0] || "-",
+    purpose: row[1] || "名目未入力",
+    amount: row[2] || "￥0"
+  }));
+  const total = receiptRows.reduce((sum, row) => sum + parseCurrency(row.amount), 0);
+  const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
+
+  return `<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(title)}</title>
+<style>
+${commonStyles()}
+  h1 { text-align: left; letter-spacing: 0; margin-bottom: 5mm; }
+  .meta { display: flex; justify-content: space-between; gap: 8mm; margin-bottom: 8mm; color: #566576; font-size: 12px; }
+  .receipt-table { table-layout: fixed; }
+  .receipt-table th:nth-child(1), .receipt-table td:nth-child(1) { width: 31mm; white-space: nowrap; }
+  .receipt-table th:nth-child(3), .receipt-table td:nth-child(3) { width: 34mm; text-align: right; white-space: nowrap; }
+  .receipt-table tfoot td { background: #f4f4f4; font-weight: 800; }
+  .empty { margin-top: 12mm; color: #566576; text-align: center; }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <h1>${escapeHtml(title)}</h1>
+  <section class="meta">
+    <div>作成日：${escapeHtml(new Date().toLocaleDateString("ja-JP"))}</div>
+    <div>${escapeHtml(issuerName || "")}</div>
+  </section>
+  ${receiptRows.length ? `<table class="receipt-table">
+    <thead><tr><th>日付</th><th>名目</th><th>金額</th></tr></thead>
+    <tbody>
+      ${receiptRows.map((row) => `<tr><td>${escapeHtml(row.date)}</td><td>${escapeHtml(row.purpose)}</td><td>${escapeHtml(row.amount)}</td></tr>`).join("")}
+    </tbody>
+    <tfoot><tr><td colspan="2">合計 ${receiptRows.length}件</td><td>${escapeHtml(yen.format(total))}</td></tr></tfoot>
+  </table>` : `<p class="empty">対象データがありません</p>`}
+</main>
+</body>
+</html>`;
+}
+
 export function buildPrintableDocumentHtml(input: PrintableDocumentInput) {
   if (input.title === "請求書" || input.title === "見積書") return buildMoneyDocumentHtml(input);
+  if (input.title === "領収書一覧") return buildReceiptListDocumentHtml(input);
   return buildListDocumentHtml(input);
 }

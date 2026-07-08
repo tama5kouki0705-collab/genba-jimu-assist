@@ -59,7 +59,7 @@ export function buildCalendarItems({
   });
 
   receipts.forEach((receipt) => {
-    pushItem(receipt.date, { title: receipt.storeName || "領収書", sub: `${formatCurrency(receipt.amount || 0)} / ${receiptStatusLabel(receipt.status)}`, kind: "領収書" });
+    pushItem(receipt.date, { title: receipt.purpose || receipt.storeName || "領収書", sub: `${formatCurrency(receipt.amount || 0)} / ${receiptStatusLabel(receipt.status)}`, kind: "領収書" });
   });
   workLogs.forEach((log) => {
     pushItem(log.date, { title: log.siteName || "日報記入", sub: `${log.workers || "作業員未入力"} / ${log.memo ? "メモあり" : "メモ未入力"}`, kind: "作業" });

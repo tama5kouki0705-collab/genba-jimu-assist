@@ -126,6 +126,8 @@ function num(value: FormDataEntryValue | null) {
   return Number(value || 0);
 }
 
+const receiptDisplayName = (receipt: Receipt) => receipt.purpose || receipt.storeName || "名目未入力";
+
 function authErrorMessage(message: string) {
   const lower = message.toLowerCase();
   if (lower.includes("invalid login credentials")) return "メールまたはパスワードが違います";
@@ -143,12 +145,13 @@ function Field({ label, name, type = "text", required, defaultValue, placeholder
     <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
       {label}
       <input
-        className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+        className="tap min-h-12 min-w-0 w-full max-w-full appearance-none rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
         name={name}
         type={type}
         required={required}
         defaultValue={defaultValue}
         placeholder={placeholder}
+        style={type === "date" ? { WebkitAppearance: "none" } : undefined}
       />
     </label>
   );
@@ -165,11 +168,11 @@ function SelectField({ label, name, children, defaultValue }: { label: string; n
   );
 }
 
-function TextArea({ label, name, defaultValue }: { label: string; name: string; defaultValue?: string }) {
+function TextArea({ label, name, defaultValue, placeholder }: { label: string; name: string; defaultValue?: string; placeholder?: string }) {
   return (
     <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
       {label}
-      <textarea name={name} defaultValue={defaultValue} rows={3} className="min-h-24 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
+      <textarea name={name} defaultValue={defaultValue} placeholder={placeholder} rows={3} className="min-h-24 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft" />
     </label>
   );
 }
@@ -216,6 +219,7 @@ export default function App() {
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [receiptFilter, setReceiptFilter] = useState<"all" | "unprocessed" | "processed">("all");
   const [editingReceiptId, setEditingReceiptId] = useState("");
+  const [selectedReceiptIds, setSelectedReceiptIds] = useState<string[]>([]);
   const [calendarMonth, setCalendarMonth] = useState(monthInput());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(today);
   const [calendarAddFocus, setCalendarAddFocus] = useState(false);
@@ -232,6 +236,10 @@ export default function App() {
     window.addEventListener(STORAGE_ERROR_EVENT, showStorageError);
     return () => window.removeEventListener(STORAGE_ERROR_EVENT, showStorageError);
   }, []);
+
+  useEffect(() => {
+    setSelectedReceiptIds((ids) => ids.filter((id) => receipts.some((receipt) => receipt.id === id)));
+  }, [receipts]);
 
   useEffect(() => {
     if (tab === "calendar" && calendarAddFocus) window.scrollTo({ top: 0, behavior: "smooth" });
@@ -314,6 +322,7 @@ export default function App() {
     if (receiptFilter === "processed") return receipt.status === "処理済み";
     return true;
   });
+  const selectedReceipts = receipts.filter((receipt) => selectedReceiptIds.includes(receipt.id));
   const editingReceipt = receipts.find((receipt) => receipt.id === editingReceiptId);
   const calendarItems = useMemo(() => buildCalendarItems({
     calendarSchedules,
@@ -382,7 +391,7 @@ export default function App() {
     ...unprocessedReceipts.map((receipt) => ({
       id: `receipt-${receipt.id}`,
       title: "未処理の領収書",
-      body: `${receipt.storeName || "領収書"} / ${yen.format(receipt.amount || 0)}`,
+      body: `${receiptDisplayName(receipt)} / ${yen.format(receipt.amount || 0)}`,
       actions: ["領収書を見る"]
     }))
   ];
@@ -391,7 +400,7 @@ export default function App() {
     () => [
       ...(ENABLE_BILLING ? invoices.map((item) => ({ type: "請求書", title: item.clientCompany, status: item.status, siteId: item.siteId })) : []),
       ...(ENABLE_BILLING ? estimates.map((item) => ({ type: "見積書", title: item.clientCompany, status: item.status, siteId: item.siteId })) : []),
-      ...receipts.map((item) => ({ type: "領収書", title: item.storeName, status: item.status, siteId: item.siteId })),
+      ...receipts.map((item) => ({ type: "領収書", title: receiptDisplayName(item), status: item.status, siteId: item.siteId })),
       ...qualifications.map((item) => ({ type: "資格証", title: item.qualificationName, status: daysLeft(item.expiryDate) < 0 ? "期限切れ" : "保管中", siteId: "" })),
       ...vehicles.map((item) => ({ type: "車両書類", title: item.vehicleName, status: daysLeft(item.inspectionExpiryDate) < 0 ? "期限切れ" : "保管中", siteId: "" }))
     ],
@@ -556,7 +565,7 @@ export default function App() {
     };
   }
 
-  async function downloadPdf(title: string, rows: Array<[string, string]>, note?: string) {
+  async function downloadPdf(title: string, rows: Array<[string, string] | [string, string, string]>, note?: string) {
     const html = buildPrintableDocumentHtml({ title, rows, issuerName: note });
     if (!setLocalStorageItem("genba:print-html", html)) {
       setMessage(STORAGE_LIMIT_MESSAGE);
@@ -653,14 +662,42 @@ export default function App() {
       `担当者: ${workerLabel}`,
       `会社/所属: ${companyLabel}`,
       `日付: ${receipt.date || "-"}`,
-      `支払先: ${receipt.storeName || "-"}`,
+      `名目: ${receiptDisplayName(receipt)}`,
       `金額: ${yen.format(receipt.amount || 0)}`,
-      `用途: ${receipt.purpose || "-"}`,
       `状態: ${receiptStatusLabel(receipt.status)}`,
       `メモ: ${receipt.memo || "-"}`
     ];
     const shared = await shareText("領収書共有", lines.join("\n"), receipt.imageUrl || undefined);
     if (shared) setReceipts(receipts.map((item) => item.id === receipt.id ? { ...item, submitted: true } : item));
+  }
+
+  function toggleReceiptSelection(receiptId: string) {
+    setSelectedReceiptIds((ids) => ids.includes(receiptId) ? ids.filter((id) => id !== receiptId) : [...ids, receiptId]);
+  }
+
+  function toggleAllVisibleReceipts() {
+    const visibleIds = filteredReceipts.map((receipt) => receipt.id);
+    if (!visibleIds.length) return;
+    const allVisibleSelected = visibleIds.every((id) => selectedReceiptIds.includes(id));
+    setSelectedReceiptIds((ids) => allVisibleSelected ? ids.filter((id) => !visibleIds.includes(id)) : Array.from(new Set([...ids, ...visibleIds])));
+  }
+
+  async function shareSelectedReceipts() {
+    if (!selectedReceipts.length) {
+      setMessage("共有する領収書を選んでください");
+      return;
+    }
+    const total = selectedReceipts.reduce((sum, receipt) => sum + (receipt.amount || 0), 0);
+    const lines = [
+      "領収書まとめ共有",
+      ...selectedReceipts.map((receipt) => {
+        const site = sites.find((item) => item.id === receipt.siteId);
+        return `${receipt.date || "-"}｜${receiptDisplayName(receipt)}｜${yen.format(receipt.amount || 0)}｜${site?.siteName || "現場なし"}｜${receipt.memo || "-"}`;
+      }),
+      `合計 ${selectedReceipts.length}件 ${yen.format(total)}`
+    ];
+    const shared = await shareText("領収書まとめ共有", lines.join("\n"));
+    if (shared) setReceipts(receipts.map((receipt) => selectedReceiptIds.includes(receipt.id) ? { ...receipt, submitted: true } : receipt));
   }
 
   async function saveSite(values: SiteInputValues, successMessage = "現場を登録しました") {
@@ -1381,7 +1418,7 @@ export default function App() {
               siteId: String(fd.get("siteId") || ""),
               ...imageInfo,
               date: String(fd.get("date") || "").trim(),
-              storeName: String(fd.get("storeName") || "").trim(),
+              storeName: editingReceipt?.storeName ?? "",
               amount: num(fd.get("amount")),
               taxAmount: num(fd.get("taxAmount")),
               purpose: String(fd.get("purpose") || "その他"),
@@ -1400,14 +1437,14 @@ export default function App() {
             {editingReceipt ? (
               <div className="rounded-lg border border-genba bg-skysoft p-4">
                 <p className="text-sm font-black text-genba">編集中の領収書</p>
-                <p className="mt-1 text-sm text-slate-700">{editingReceipt.date || "日付なし"} / {editingReceipt.storeName || "店名なし"} / {yen.format(editingReceipt.amount || 0)}</p>
+                <p className="mt-1 text-sm text-slate-700">{editingReceipt.date || "日付なし"} / {receiptDisplayName(editingReceipt)} / {yen.format(editingReceipt.amount || 0)}</p>
               </div>
             ) : null}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {editingReceipt ? (
                 <button type="button" onClick={resetReceiptForm} className="tap min-h-12 rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">新規入力に戻る</button>
               ) : null}
-              <p className="rounded-lg bg-skysoft p-3 text-sm font-bold text-slate-700">画像を選び、金額と用途を入力して保存します。</p>
+              <p className="rounded-lg bg-skysoft p-3 text-sm font-bold text-slate-700">画像を選び、金額と名目を入力して保存します。</p>
             </div>
             <div className="grid gap-3 rounded-lg border border-genba bg-white p-4">
               <div>
@@ -1428,11 +1465,10 @@ export default function App() {
               <SiteSelect sites={sites} defaultValue={editingReceipt?.siteId} />
               <Field label="日付" name="date" type="date" defaultValue={editingReceipt?.date ?? ""} />
               <Field label="金額" name="amount" type="number" defaultValue={editingReceipt?.amount ?? ""} />
-              <Field label="店舗名 / 支払先" name="storeName" defaultValue={editingReceipt?.storeName ?? ""} />
-              <SelectField label="用途" name="purpose" defaultValue={editingReceipt?.purpose || "その他"}>
+              <SelectField label="名目" name="purpose" defaultValue={editingReceipt?.purpose || "その他"}>
                 {receiptPurposeOptions.map((category) => <option key={category}>{category}</option>)}
               </SelectField>
-              <TextArea label="メモ" name="memo" defaultValue={editingReceipt?.memo ?? ""} />
+              <TextArea label="メモ" name="memo" defaultValue={editingReceipt?.memo ?? ""} placeholder="例：インパクト一式、木材 など買った物を書いておくと後で分かりやすいです" />
               <SelectField label="状態" name="status" defaultValue={editingReceipt?.status || "未処理"}><option value="未処理">未処理</option><option value="処理済み">処理済み</option></SelectField>
               <details className="rounded-lg border border-line bg-white p-3">
                 <summary className="cursor-pointer text-sm font-bold text-genba">必要なら消費税も入れる</summary>
@@ -1462,7 +1498,16 @@ export default function App() {
               <p className="text-lg font-black">{unprocessedReceipts.length}枚</p>
             </div>
           </div>
-          <button onClick={() => downloadPdf("領収書一覧", receipts.map((r) => [r.storeName || "店名なし", `${r.date} / ${yen.format(r.amount)} / ${receiptStatusLabel(r.status)}`]))} className="tap mt-3 min-h-12 w-full rounded-lg bg-skysoft font-bold text-genba">領収書一覧PDF</button>
+          <button onClick={() => downloadPdf("領収書一覧", receipts.map((r) => [r.date || "-", receiptDisplayName(r), yen.format(r.amount || 0)]))} className="tap mt-3 min-h-12 w-full rounded-lg bg-skysoft font-bold text-genba">領収書一覧PDF</button>
+          <div className="mt-3 grid gap-2 rounded-lg border border-line bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-bold text-slate-700">選択中 {selectedReceipts.length}件</p>
+              <button type="button" onClick={toggleAllVisibleReceipts} className="tap min-h-11 rounded-lg border border-genba bg-white px-3 py-2 text-sm font-bold text-genba">
+                {filteredReceipts.length > 0 && filteredReceipts.every((receipt) => selectedReceiptIds.includes(receipt.id)) ? "全解除" : "表示分を全選択"}
+              </button>
+            </div>
+            <button type="button" onClick={shareSelectedReceipts} className="tap min-h-12 rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">選択した領収書をまとめて共有</button>
+          </div>
           {filteredReceipts.length === 0 ? (
             <p className="mt-4 rounded-lg bg-skysoft p-4 text-center text-sm text-slate-600">まだ登録がありません</p>
           ) : (
@@ -1470,14 +1515,24 @@ export default function App() {
               {filteredReceipts.map((receipt) => (
                 <div key={receipt.id} className={`rounded-lg border p-4 ${editingReceiptId === receipt.id ? "border-genba bg-skysoft" : "border-line bg-white"}`}>
                   <div className="flex gap-3">
+                    <label className="flex min-h-20 shrink-0 items-start pt-1">
+                      <input
+                        type="checkbox"
+                        checked={selectedReceiptIds.includes(receipt.id)}
+                        onChange={() => toggleReceiptSelection(receipt.id)}
+                        className="h-6 w-6 rounded border-line text-genba"
+                        aria-label={`${receiptDisplayName(receipt)}を選択`}
+                      />
+                    </label>
                     {receipt.imageUrl ? <img src={receipt.imageUrl} alt="" className="h-20 w-20 shrink-0 rounded-lg object-cover" /> : <div className="grid h-20 w-20 shrink-0 place-items-center rounded-lg bg-skysoft text-genba"><Camera /></div>}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-lg px-2 py-1 text-xs font-bold ${receipt.status === "未処理" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{receiptStatusLabel(receipt.status)}</span>
                         {receipt.submitted ? <span className="rounded-lg bg-genba px-2 py-1 text-xs font-bold text-white">提出済み</span> : null}
-                        <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{receipt.purpose || "用途未入力"}</span>
+                        <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{receipt.purpose || "名目未入力"}</span>
                       </div>
-                      <p className="mt-2 break-words font-black">{receipt.storeName || "領収書"}</p>
+                      <p className="mt-2 break-words font-black">{receiptDisplayName(receipt)}</p>
+                      {receipt.memo ? <p className="mt-1 break-words text-sm text-slate-600">{receipt.memo}</p> : null}
                       <p className="mt-1 text-sm text-slate-600">{receipt.date || "日付なし"}</p>
                       <p className="mt-1 text-xl font-black text-genba">{yen.format(receipt.amount)}</p>
                     </div>
