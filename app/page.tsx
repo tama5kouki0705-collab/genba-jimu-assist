@@ -44,7 +44,7 @@ import {
 } from "@/lib/remote-data";
 import { ensureImageFile, fileToDataUrl } from "@/lib/client-files";
 import { buildCalendarItems } from "@/lib/calendar-items";
-import { addMonths, calendarCells, calendarKindClass, daysLeft, isCurrentMonth, localDateInput, monthInput } from "@/lib/calendar-domain";
+import { addMonths, autoWorkTimes, calendarCells, calendarKindClass, daysLeft, isCurrentMonth, localDateInput, monthInput } from "@/lib/calendar-domain";
 import { createInvoiceDraftFromSchedule, createInvoiceDraftFromWorkLog } from "@/lib/invoice-workflow";
 import { INVOICE_LINE_ITEM_CATEGORIES, INVOICE_LINE_ITEM_UNITS, MAX_INVOICE_LINE_ITEMS, MIN_INVOICE_LINE_ITEMS, calculateInvoiceTotals, normalizeInvoiceLineItems } from "@/lib/invoice-line-items";
 import { STORAGE_ERROR_EVENT, STORAGE_LIMIT_MESSAGE, accountKey, getLocalAccounts, hashPassword, normalizeEmail, saveLocalAccounts, setLocalStorageItem, useStoredState } from "@/lib/local-state";
@@ -323,6 +323,8 @@ export default function App() {
   const activeWorkLog = workLogs.find((log) => log.date === workLogDate);
   const activeWorkProgress = [activeWorkLog?.memo, activeWorkLog?.receiptDone, activeWorkLog?.photoDone, activeWorkLog?.invoiceReady].filter(Boolean).length;
   const activeWorkSchedule = calendarSchedules.find((item) => item.date === workLogDate);
+  const activeWorkSite = activeWorkSchedule ? sites.find((site) => site.id === activeWorkSchedule.siteId) : undefined;
+  const activeWorkTimes = autoWorkTimes(activeWorkSchedule?.startTime || "", activeWorkSchedule?.endTime || "");
   const todayScheduleSite = todayMainSchedule ? sites.find((site) => site.id === todayMainSchedule.siteId) : undefined;
   const todayReceipts = receipts.filter((receipt) => receipt.date === today);
   const todaySiteItems = todayCalendarItems.filter((item) => item.kind === "現場");
@@ -686,6 +688,32 @@ export default function App() {
     setMessage("領収書を未処理一覧とカレンダーに入れました");
   }
 
+  async function saveSiteFromForm(form: HTMLFormElement, successMessage = "現場を登録しました") {
+    const fd = new FormData(form);
+    const site: Site = {
+      id: uid("site"),
+      siteName: String(fd.get("siteName") || "").trim(),
+      address: String(fd.get("address") || "").trim(),
+      clientCompany: String(fd.get("clientCompany") || "").trim(),
+      clientPerson: String(fd.get("clientPerson") || "").trim(),
+      clientPhone: String(fd.get("clientPhone") || "").trim(),
+      startDate: String(fd.get("startDate") || ""),
+      endDate: String(fd.get("endDate") || ""),
+      workDescription: String(fd.get("workDescription") || "").trim(),
+      dailyRate: num(fd.get("dailyRate")),
+      memo: String(fd.get("memo") || "").trim()
+    };
+    if (!site.siteName) {
+      setMessage("現場名を入力してください");
+      return null;
+    }
+    setSites([site, ...sites]);
+    await saveRemote((id) => saveSiteRemote(site, id));
+    form.reset();
+    setMessage(successMessage);
+    return site;
+  }
+
   async function saveWorkLogFromForm(form: HTMLFormElement) {
     const fd = new FormData(form);
     const date = String(fd.get("date") || today);
@@ -916,6 +944,26 @@ export default function App() {
         </div>
         <span className="shrink-0 rounded-lg bg-skysoft px-3 py-2 text-xs font-bold text-genba">{selectedCalendarDate}</span>
       </div>
+      {sites.length === 0 ? (
+        <div className="mb-3 rounded-lg bg-skysoft p-4">
+          <p className="text-sm font-black text-ink">登録済み現場がありません</p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">先に現場を登録すると、予定・日報・領収書で選べます。</p>
+        </div>
+      ) : null}
+      <details className="mb-3 rounded-lg border border-line bg-skysoft p-3">
+        <summary className="cursor-pointer text-sm font-black text-genba">この画面で現場を追加</summary>
+        <form className="mt-3 grid gap-3" onSubmit={async (e) => {
+          e.preventDefault();
+          await saveSiteFromForm(e.currentTarget, "現場を追加しました。予定の現場欄で選べます");
+        }}>
+          <Field label="現場名" name="siteName" required />
+          <Field label="住所" name="address" />
+          <Field label="会社名" name="clientCompany" />
+          <Field label="作業内容" name="workDescription" />
+          <Field label="人工単価" name="dailyRate" type="number" />
+          <SaveButton label="現場を追加する" />
+        </form>
+      </details>
       <form key={selectedCalendarDate} className="grid gap-3" onSubmit={async (e) => {
         e.preventDefault();
         await saveCalendarScheduleFromForm(e.currentTarget);
@@ -1063,10 +1111,30 @@ export default function App() {
               e.preventDefault();
               await saveWorkLogFromForm(e.currentTarget);
             }}>
-              <Field label="日付" name="date" type="date" defaultValue={activeWorkLog?.date || workLogDate} />
-              <SiteSelect sites={sites} defaultValue={activeWorkLog?.siteId || activeWorkSchedule?.siteId} />
-              <Field label="作業員・応援者" name="workers" defaultValue={activeWorkLog?.workers || activeWorkSchedule?.workers || workerLabel} placeholder="例：自分、佐藤さん、田中さん" />
-              <TextArea label="今日やったこと" name="memo" defaultValue={activeWorkLog?.memo || activeWorkSchedule?.workDescription || ""} />
+              <input type="hidden" name="date" value={activeWorkLog?.date || workLogDate} readOnly />
+              <input type="hidden" name="siteId" value={activeWorkLog?.siteId || activeWorkSchedule?.siteId || ""} readOnly />
+              <input type="hidden" name="workers" value={activeWorkLog?.workers || activeWorkSchedule?.workers || workerLabel} readOnly />
+              <div className="grid gap-2 rounded-lg bg-skysoft p-3">
+                {[
+                  ["日付", activeWorkLog?.date || workLogDate],
+                  ["現場名", activeWorkLog?.siteName || activeWorkSchedule?.siteName || "現場未登録"],
+                  ["住所", activeWorkSite?.address || "住所未登録"],
+                  ["担当者", activeWorkLog?.workers || activeWorkSchedule?.workers || workerLabel],
+                  ["会社/所属", companyLabel],
+                  ["開始/終了予定", activeWorkSchedule?.startTime || activeWorkSchedule?.endTime ? `${activeWorkSchedule?.startTime || "-"}-${activeWorkSchedule?.endTime || "-"}` : "未登録"],
+                  ["作業開始", activeWorkTimes.workStartTime],
+                  ["作業終了", activeWorkTimes.workEndTime],
+                  ["予定メモ", activeWorkSchedule?.memo || "メモなし"],
+                  ["その日の領収書", `${receipts.filter((receipt) => receipt.date === workLogDate).length}件`],
+                  ["写真メモ", activeWorkLog?.photoUrls.length ? `写真 ${activeWorkLog.photoUrls.length}枚` : "未登録"]
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg bg-white p-3">
+                    <p className="text-xs font-bold text-slate-500">{label}</p>
+                    <p className="mt-1 break-words text-sm font-black text-ink">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <TextArea label="作業内容" name="memo" defaultValue={activeWorkLog?.memo || activeWorkSchedule?.workDescription || ""} />
               <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
                 現場写真
                 <input name="photos" type="file" accept="image/*" multiple className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base" />
@@ -1265,12 +1333,7 @@ export default function App() {
         <CrudSection title="現場登録" icon={<Building2 />} sub="元請・担当者・作業内容をまとめます">
           <form className="grid gap-3" onSubmit={async (e) => {
             e.preventDefault();
-            const form = e.currentTarget;
-            const fd = new FormData(form);
-            const site = { id: uid("site"), siteName: String(fd.get("siteName") || ""), address: String(fd.get("address") || ""), clientCompany: String(fd.get("clientCompany") || ""), clientPerson: String(fd.get("clientPerson") || ""), clientPhone: String(fd.get("clientPhone") || ""), startDate: String(fd.get("startDate") || ""), endDate: String(fd.get("endDate") || ""), workDescription: String(fd.get("workDescription") || ""), dailyRate: num(fd.get("dailyRate")), memo: String(fd.get("memo") || "") };
-            setSites([site, ...sites]);
-            await saveRemote((id) => saveSiteRemote(site, id));
-            form.reset();
+            await saveSiteFromForm(e.currentTarget);
           }}>
             <Field label="現場名" name="siteName" required />
             <Field label="現場住所" name="address" />
