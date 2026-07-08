@@ -1,7 +1,7 @@
 {
-  "name": "親方の味方",
-  "short_name": "親方の味方",
-  "description": "効率重視のAI事務アシスタント",
+  "name": "現場事務アシスト",
+  "short_name": "現場事務アシスト",
+  "description": "現場責任者向けの記録アシスタント。日報・領収書・写真メモを現場ごとにまとめて会社へ共有",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f7fbff",
