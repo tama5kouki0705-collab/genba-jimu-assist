@@ -84,6 +84,9 @@ type SiteInputValues = {
 const today = localDateInput();
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
 const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+const BRAND_NAME = "段取　命　君";
+const BRAND_TAGLINE = "職長から始める";
+const BRAND_CHARACTER_SRC = "/dandori-kun.jpg";
 const receiptPurposeOptions = ["材料", "工具・道具", "交通", "駐車場", "高速", "燃料", "消耗品", "外注", "その他"];
 // 請求書・見積書機能。復活手順：この値をtrueに戻すだけ。関連コードは lib/invoice-workflow.ts / lib/pdf-documents.ts / page.tsx の MoneySection。
 const ENABLE_BILLING = false;
@@ -927,7 +930,7 @@ export default function App() {
           <ClipboardList size={34} />
         </div>
         <div>
-          <h1 className="text-3xl font-black">現場事務アシスト</h1>
+          <h1 className="text-3xl font-black">{BRAND_NAME}</h1>
           <p className="mt-2 text-slate-600">ログイン状態を確認しています</p>
         </div>
       </main>
@@ -962,11 +965,11 @@ export default function App() {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-5 px-5 py-8">
         <div className="text-center">
-          <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-lg bg-genba text-white">
-            <ClipboardList size={34} />
+          <div className="mx-auto mb-4 h-24 w-24 overflow-hidden rounded-full border-4 border-white bg-white shadow-soft ring-2 ring-skysoft">
+            <img src={BRAND_CHARACTER_SRC} alt="段取 命 君" className="h-full w-full object-cover object-top" />
           </div>
-          <h1 className="text-3xl font-black">現場事務アシスト</h1>
-          <p className="mt-2 text-slate-600">担当現場の記録を会社へ共有できる</p>
+          <h1 className="text-3xl font-black">{BRAND_NAME}</h1>
+          <p className="mt-2 text-slate-600">{BRAND_TAGLINE}</p>
         </div>
         <Card>
           <div className="grid gap-3">
@@ -1067,8 +1070,8 @@ export default function App() {
       <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-line bg-[#f7fbff]/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold text-genba">現場責任者向けの記録アシスタント</p>
-            <h1 className="text-2xl font-black">現場事務アシスト</h1>
+            <p className="text-xs font-bold text-genba">{BRAND_TAGLINE}</p>
+            <h1 className="text-2xl font-black">{BRAND_NAME}</h1>
             <p className="mt-1 text-xs text-slate-500">{syncStatus}</p>
           </div>
           <button onClick={() => setTab("settings")} className="grid h-12 w-12 place-items-center rounded-lg bg-white text-genba shadow-soft" aria-label="メニュー">
@@ -1086,8 +1089,8 @@ export default function App() {
                 <h2 className="mt-1 break-words text-3xl font-black text-ink">{hasSites ? mainSiteLabel : "現場を登録しましょう"}</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">今日の現場情報を確認して、必要な記録を残しましょう。</p>
               </div>
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-skysoft text-genba">
-                <Building2 />
+              <span className="h-12 w-12 shrink-0 overflow-hidden rounded-full border border-line bg-white shadow-soft">
+                <img src={BRAND_CHARACTER_SRC} alt="段取 命 君" className="h-full w-full object-cover object-top" />
               </span>
             </div>
             {hasSites ? (
@@ -1119,6 +1122,12 @@ export default function App() {
               <div className="mt-4 rounded-lg border border-genba bg-skysoft p-4">
                 <p className="text-lg font-black text-ink">現場を登録しましょう</p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">現場を登録して予定に入れると、日報・領収書・写真メモが現場ごとにまとまります。</p>
+                <div className="mt-3 flex items-center gap-3 rounded-lg bg-white p-3">
+                  <span className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-line bg-white">
+                    <img src={BRAND_CHARACTER_SRC} alt="段取 命 君" className="h-full w-full object-cover object-top" />
+                  </span>
+                  <p className="min-w-0 rounded-lg bg-skysoft px-3 py-2 text-sm font-black text-genba">まずは今日の段取りから！</p>
+                </div>
                 <button
                   type="button"
                   onClick={() => setTab("sites")}
