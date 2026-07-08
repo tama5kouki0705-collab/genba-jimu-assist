@@ -314,9 +314,12 @@ export default function App() {
   }, [hasRemoteSession, userId, setAdminUsers, setCalendarSchedules, setEstimates, setInvoices, setProfile, setQualifications, setReceipts, setSites, setVehicles, setWorkLogs]);
 
   const currentSite = sites[0];
+  const hasSites = sites.length > 0;
   const editingSite = sites.find((site) => site.id === editingSiteId);
   const todayWorkLog = workLogs.find((log) => log.date === today);
-  const todayWorkProgress = [todayWorkLog?.memo, todayWorkLog?.receiptDone, todayWorkLog?.photoDone, ...(ENABLE_BILLING ? [todayWorkLog?.invoiceReady] : [])].filter(Boolean).length;
+  const todayWorkProgressItems = [todayWorkLog?.memo, todayWorkLog?.receiptDone, todayWorkLog?.photoDone, ...(ENABLE_BILLING ? [todayWorkLog?.invoiceReady] : [])];
+  const todayWorkProgress = todayWorkProgressItems.filter(Boolean).length;
+  const todayWorkProgressTotal = todayWorkProgressItems.length;
   const monthSales = ENABLE_BILLING ? invoices.filter((invoice) => invoice.status === "入金済み" && isCurrentMonth(invoice.issueDate ?? "")).reduce((sum, invoice) => sum + invoice.totalAmount, 0) : 0;
   const unprocessedReceipts = receipts.filter((r) => r.status === "未処理");
   const monthExpense = receipts.filter((receipt) => isCurrentMonth(receipt.date)).reduce((sum, receipt) => sum + receipt.amount, 0);
@@ -371,6 +374,11 @@ export default function App() {
   const todaySiteAddress = todayScheduleSite?.address || currentSite?.address || "";
   const todayPhotoMemo = todayWorkLog?.photoUrls.length ? `写真 ${todayWorkLog.photoUrls.length}枚を保存済み` : "写真メモはまだありません";
   const todayWorkDraft = todayWorkLog?.memo || todayMainSchedule?.workDescription || "日報下書きはまだありません";
+  const todayProgressLabel = todayWorkLog ? `${todayWorkProgress}/${todayWorkProgressTotal} 完了` : "日報はまだです";
+  const todayPeopleLabel = todayMainSchedule?.workers
+    ? `${todayMainSchedule.workers}${todayMainSchedule.laborCount ? `（${todayMainSchedule.laborCount}人工）` : ""}`
+    : todayWorkLog?.workers || "未入力";
+  const todayHomeMemo = todayMainSchedule?.memo || currentSite?.memo || "";
   const homeStats = [
     ["今日の予定", `${todaySchedules.length}件`],
     ["今日の領収書", `${todayReceipts.length}件`],
@@ -655,6 +663,9 @@ export default function App() {
       `予定時間: ${todayMainSchedule?.startTime || "-"}-${todayMainSchedule?.endTime || "-"}`,
       `担当者: ${workerLabel}`,
       `会社/所属: ${companyLabel}`,
+      `進捗: ${todayProgressLabel}`,
+      `人数: ${todayPeopleLabel}`,
+      `メモ: ${todayHomeMemo || "未入力"}`,
       `日報: ${todayWorkDraft}`,
       `領収書: ${todayReceipts.length}件`,
       `写真メモ: ${todayPhotoMemo}`
@@ -1072,26 +1083,31 @@ export default function App() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-black text-genba">今日の担当現場</p>
-                <h2 className="mt-1 break-words text-3xl font-black text-ink">{todayMainSchedule ? mainSiteLabel : "今日の現場を登録しましょう"}</h2>
+                <h2 className="mt-1 break-words text-3xl font-black text-ink">{hasSites ? mainSiteLabel : "現場を登録しましょう"}</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">今日の現場情報を確認して、必要な記録を残しましょう。</p>
               </div>
               <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-skysoft text-genba">
                 <Building2 />
               </span>
             </div>
-            {todayMainSchedule ? (
+            {hasSites ? (
               <div className="mt-4 grid gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setWorkLogDate(today); setTab("todayWork"); }}
+                  className="tap min-h-16 rounded-lg bg-genba px-4 py-4 text-left text-xl font-black text-white shadow-soft"
+                >
+                  日報を終わらせる
+                </button>
+                {!todayMainSchedule ? <p className="rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-800">今日の予定はまだ入っていません</p> : null}
                 {[
+                  ["進捗状況", todayProgressLabel],
+                  ["人数", todayPeopleLabel],
+                  ...(todayHomeMemo ? [["メモ内容", todayHomeMemo]] : []),
                   ["現場名", mainSiteLabel],
                   ["住所", todaySiteAddress || "住所未登録"],
-                  ["予定時間", todayMainSchedule.startTime || todayMainSchedule.endTime ? `${todayMainSchedule.startTime || "-"}-${todayMainSchedule.endTime || "-"}` : "未登録"],
-                  ["担当者", workerLabel],
-                  ["会社/所属", companyLabel],
-                  ["現場メモ", todayMainSchedule.memo || mainSiteSub],
-                  ["今日の日報下書き", todayWorkDraft],
-                  ["今日保存した領収書", `${todayReceipts.length}件`],
-                  ["今日の写真メモ", todayPhotoMemo],
-                  ["明日の予定", tomorrowSchedules[0]?.siteName || "未登録"]
+                  ["予定時間", todayMainSchedule?.startTime || todayMainSchedule?.endTime ? `${todayMainSchedule?.startTime || "-"}-${todayMainSchedule?.endTime || "-"}` : "未登録"],
+                  ["今日保存した領収書", `${todayReceipts.length}件`]
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-lg bg-skysoft p-3">
                     <p className="text-xs font-bold text-slate-500">{label}</p>
@@ -1100,9 +1116,16 @@ export default function App() {
                 ))}
               </div>
             ) : (
-              <div className="mt-4 rounded-lg bg-skysoft p-4">
-                <p className="text-lg font-black text-ink">今日の現場を登録しましょう</p>
+              <div className="mt-4 rounded-lg border border-genba bg-skysoft p-4">
+                <p className="text-lg font-black text-ink">現場を登録しましょう</p>
                 <p className="mt-1 text-sm leading-6 text-slate-600">現場を登録して予定に入れると、日報・領収書・写真メモが現場ごとにまとまります。</p>
+                <button
+                  type="button"
+                  onClick={() => setTab("sites")}
+                  className="tap mt-4 min-h-14 w-full animate-pulse rounded-lg border-2 border-genba bg-white px-4 py-3 text-left text-base font-black text-genba shadow-soft"
+                >
+                  現場を登録しましょう
+                </button>
               </div>
             )}
           </Card>
