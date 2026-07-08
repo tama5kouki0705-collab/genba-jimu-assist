@@ -220,6 +220,8 @@ export default function App() {
   const [receiptFilter, setReceiptFilter] = useState<"all" | "unprocessed" | "processed">("all");
   const [editingReceiptId, setEditingReceiptId] = useState("");
   const [selectedReceiptIds, setSelectedReceiptIds] = useState<string[]>([]);
+  const [editingSiteId, setEditingSiteId] = useState("");
+  const [siteDailyRateEnabled, setSiteDailyRateEnabled] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(monthInput());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(today);
   const [calendarAddFocus, setCalendarAddFocus] = useState(false);
@@ -312,6 +314,7 @@ export default function App() {
   }, [hasRemoteSession, userId, setAdminUsers, setCalendarSchedules, setEstimates, setInvoices, setProfile, setQualifications, setReceipts, setSites, setVehicles, setWorkLogs]);
 
   const currentSite = sites[0];
+  const editingSite = sites.find((site) => site.id === editingSiteId);
   const todayWorkLog = workLogs.find((log) => log.date === today);
   const todayWorkProgress = [todayWorkLog?.memo, todayWorkLog?.receiptDone, todayWorkLog?.photoDone, ...(ENABLE_BILLING ? [todayWorkLog?.invoiceReady] : [])].filter(Boolean).length;
   const monthSales = ENABLE_BILLING ? invoices.filter((invoice) => invoice.status === "入金済み" && isCurrentMonth(invoice.issueDate ?? "")).reduce((sum, invoice) => sum + invoice.totalAmount, 0) : 0;
@@ -324,6 +327,12 @@ export default function App() {
   });
   const selectedReceipts = receipts.filter((receipt) => selectedReceiptIds.includes(receipt.id));
   const editingReceipt = receipts.find((receipt) => receipt.id === editingReceiptId);
+  const editingSiteWorkLogs = editingSite ? workLogs.filter((log) => log.siteId === editingSite.id).sort((a, b) => b.date.localeCompare(a.date)) : [];
+  const editingSiteSchedules = editingSite ? calendarSchedules.filter((schedule) => schedule.siteId === editingSite.id).sort((a, b) => a.date.localeCompare(b.date)) : [];
+  const editingSiteReceipts = editingSite ? receipts.filter((receipt) => receipt.siteId === editingSite.id) : [];
+  const editingSiteReceiptTotal = editingSiteReceipts.reduce((sum, receipt) => sum + (receipt.amount || 0), 0);
+  const editingSiteUpcomingSchedule = editingSiteSchedules.find((schedule) => schedule.date >= today) ?? editingSiteSchedules[editingSiteSchedules.length - 1];
+  const editingSitePhotos = editingSiteWorkLogs.flatMap((log) => log.photoUrls).slice(0, 6);
   const calendarItems = useMemo(() => buildCalendarItems({
     calendarSchedules,
     sites,
@@ -700,9 +709,22 @@ export default function App() {
     if (shared) setReceipts(receipts.map((receipt) => selectedReceiptIds.includes(receipt.id) ? { ...receipt, submitted: true } : receipt));
   }
 
-  async function saveSite(values: SiteInputValues, successMessage = "現場を登録しました") {
+  function startSiteEdit(site: Site) {
+    setEditingSiteId(site.id);
+    setSiteDailyRateEnabled((site.dailyRate || 0) > 0);
+    setMessage("選択した現場を編集できます");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function resetSiteForm() {
+    setEditingSiteId("");
+    setSiteDailyRateEnabled(false);
+    setMessage("新しい現場を登録できます");
+  }
+
+  async function saveSite(values: SiteInputValues, successMessage = "現場を登録しました", existingSite?: Site) {
     const site: Site = {
-      id: uid("site"),
+      id: existingSite?.id ?? uid("site"),
       siteName: String(values.siteName || "").trim(),
       address: String(values.address || "").trim(),
       clientCompany: String(values.clientCompany || "").trim(),
@@ -711,21 +733,23 @@ export default function App() {
       startDate: String(values.startDate || ""),
       endDate: String(values.endDate || ""),
       workDescription: String(values.workDescription || "").trim(),
-      dailyRate: num(values.dailyRate || null),
+      dailyRate: values.dailyRate === null ? existingSite?.dailyRate ?? 0 : num(values.dailyRate || null),
       memo: String(values.memo || "").trim()
     };
     if (!site.siteName) {
       setMessage("現場名を入力してください");
       return null;
     }
-    setSites([site, ...sites]);
+    setSites([site, ...sites.filter((item) => item.id !== site.id)]);
     await saveRemote((id) => saveSiteRemote(site, id));
     setMessage(successMessage);
     return site;
   }
 
-  async function saveSiteFromForm(form: HTMLFormElement, successMessage = "現場を登録しました") {
+  async function saveSiteFromForm(form: HTMLFormElement, successMessage = "現場を登録しました", existingSite?: Site) {
     const fd = new FormData(form);
+    const useDailyRate = fd.get("useDailyRate") === "on";
+    const dailyRate = useDailyRate ? fd.get("dailyRate") : existingSite ? null : "0";
     const site = await saveSite({
       siteName: fd.get("siteName"),
       address: fd.get("address"),
@@ -735,9 +759,9 @@ export default function App() {
       startDate: fd.get("startDate"),
       endDate: fd.get("endDate"),
       workDescription: fd.get("workDescription"),
-      dailyRate: fd.get("dailyRate"),
+      dailyRate,
       memo: fd.get("memo")
-    }, successMessage);
+    }, successMessage, existingSite);
     if (site) form.reset();
     return site;
   }
@@ -1365,23 +1389,86 @@ export default function App() {
 
       {tab === "sites" && (
         <CrudSection title="現場登録" icon={<Building2 />} sub="共有先・担当者・作業内容をまとめます">
-          <form className="grid gap-3" onSubmit={async (e) => {
+          <form key={editingSite?.id ?? "new-site"} className="grid gap-3" onSubmit={async (e) => {
             e.preventDefault();
-            await saveSiteFromForm(e.currentTarget);
+            const saved = await saveSiteFromForm(e.currentTarget, editingSite ? "現場を更新しました" : "現場を登録しました", editingSite);
+            if (saved) {
+              setEditingSiteId("");
+              setSiteDailyRateEnabled(false);
+            }
           }}>
-            <Field label="現場名" name="siteName" required />
-            <Field label="現場住所" name="address" />
-            <Field label="会社名 / 共有先" name="clientCompany" />
-            <Field label="担当者名" name="clientPerson" />
-            <Field label="担当者電話番号" name="clientPhone" />
-            <Field label="工期開始日" name="startDate" type="date" />
-            <Field label="工期終了日" name="endDate" type="date" />
-            <Field label="作業内容" name="workDescription" />
-            <Field label="人工単価" name="dailyRate" type="number" />
-            <TextArea label="メモ" name="memo" />
-            <SaveButton />
+            {editingSite ? (
+              <div className="rounded-lg border border-genba bg-skysoft p-4">
+                <p className="text-sm font-black text-genba">編集中の現場</p>
+                <p className="mt-1 break-words text-base font-black text-ink">{editingSite.siteName}</p>
+                <button type="button" onClick={resetSiteForm} className="tap mt-3 min-h-12 w-full rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">編集をやめる</button>
+              </div>
+            ) : null}
+            <Field label="現場名" name="siteName" required defaultValue={editingSite?.siteName ?? ""} />
+            <Field label="現場住所" name="address" defaultValue={editingSite?.address ?? ""} />
+            <Field label="会社名 / 共有先" name="clientCompany" defaultValue={editingSite?.clientCompany ?? ""} />
+            <Field label="担当者名" name="clientPerson" defaultValue={editingSite?.clientPerson ?? ""} />
+            <Field label="担当者電話番号" name="clientPhone" defaultValue={editingSite?.clientPhone ?? ""} />
+            <Field label="工期開始日" name="startDate" type="date" defaultValue={editingSite?.startDate ?? ""} />
+            <Field label="工期終了日" name="endDate" type="date" defaultValue={editingSite?.endDate ?? ""} />
+            <Field label="作業内容" name="workDescription" defaultValue={editingSite?.workDescription ?? ""} />
+            <label className="flex min-w-0 items-center gap-3 rounded-lg border border-line bg-white p-3 text-sm font-bold text-ink">
+              <input type="checkbox" name="useDailyRate" checked={siteDailyRateEnabled} onChange={(event) => setSiteDailyRateEnabled(event.currentTarget.checked)} className="h-5 w-5 shrink-0 rounded border-line text-genba" />
+              人工単価を設定する
+            </label>
+            {siteDailyRateEnabled ? <Field label="人工単価" name="dailyRate" type="number" defaultValue={editingSite?.dailyRate || ""} /> : null}
+            <TextArea label="メモ" name="memo" defaultValue={editingSite?.memo ?? ""} />
+            <SaveButton label={editingSite ? "現場を更新" : "現場を登録"} />
           </form>
-          <List items={sites.map((s) => [s.siteName, `${s.clientCompany || "会社未入力"} / ${yen.format(s.dailyRate || 0)}`])} />
+          {editingSite ? (
+            <div className="mt-4 rounded-lg border border-line bg-white p-4">
+              <h3 className="text-lg font-black text-ink">この現場の記録</h3>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="rounded-lg bg-skysoft p-3">
+                  <p className="text-xs font-bold text-genba">日報</p>
+                  <p className="mt-1 text-lg font-black">{editingSiteWorkLogs.length}件</p>
+                </div>
+                <div className="rounded-lg bg-skysoft p-3">
+                  <p className="text-xs font-bold text-genba">予定</p>
+                  <p className="mt-1 text-lg font-black">{editingSiteSchedules.length}件</p>
+                  <p className="mt-1 text-xs text-slate-600">{editingSiteUpcomingSchedule ? `${editingSiteUpcomingSchedule.date} ${editingSiteUpcomingSchedule.workDescription || "作業予定"}` : "直近予定なし"}</p>
+                </div>
+                <div className="rounded-lg bg-skysoft p-3">
+                  <p className="text-xs font-bold text-genba">領収書</p>
+                  <p className="mt-1 text-lg font-black">{editingSiteReceipts.length}件</p>
+                  <p className="mt-1 text-xs text-slate-600">{yen.format(editingSiteReceiptTotal)}</p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {editingSiteWorkLogs.slice(0, 5).map((log) => (
+                  <div key={log.id} className="rounded-lg border border-line bg-white p-3">
+                    <p className="text-xs font-bold text-genba">{log.date}</p>
+                    <p className="mt-1 break-words text-sm font-bold text-ink">{log.memo || "作業内容未入力"}</p>
+                    <p className="mt-1 text-xs text-slate-600">写真 {log.photoUrls.length}枚</p>
+                  </div>
+                ))}
+                {editingSiteWorkLogs.length === 0 ? <p className="rounded-lg bg-skysoft p-3 text-sm text-slate-600">この現場の日報はまだありません</p> : null}
+              </div>
+              {editingSitePhotos.length ? (
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {editingSitePhotos.map((photoUrl, index) => <img key={`${photoUrl}-${index}`} src={photoUrl} alt="" className="aspect-square w-full rounded-lg object-cover" />)}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {sites.length === 0 ? (
+            <p className="mt-4 rounded-lg bg-skysoft p-4 text-center text-sm text-slate-600">まだ現場がありません</p>
+          ) : (
+            <div className="mt-4 grid gap-3">
+              {sites.map((site) => (
+                <button key={site.id} type="button" onClick={() => startSiteEdit(site)} className={`tap min-h-12 rounded-lg border p-4 text-left ${editingSiteId === site.id ? "border-genba bg-skysoft" : "border-line bg-white"}`}>
+                  <p className="break-words text-base font-black text-ink">{site.siteName}</p>
+                  <p className="mt-1 break-words text-sm text-slate-600">{site.clientCompany || "会社未入力"} / {site.dailyRate > 0 ? yen.format(site.dailyRate) : "人工単価なし"}</p>
+                  {site.address ? <p className="mt-1 break-words text-xs text-slate-500">{site.address}</p> : null}
+                </button>
+              ))}
+            </div>
+          )}
         </CrudSection>
       )}
 
