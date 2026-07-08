@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeJapaneseYen,
+  Bell,
   Building2,
   CalendarDays,
   Camera,
@@ -71,6 +72,12 @@ type Tab =
 const today = localDateInput();
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
 const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+
+function addDaysInput(dateInput: string, days: number) {
+  const date = dateInput ? new Date(dateInput) : new Date();
+  date.setDate(date.getDate() + days);
+  return localDateInput(date);
+}
 
 const blankProfile: Profile = {
   companyName: "",
@@ -309,17 +316,51 @@ export default function App() {
   const monthCalendarItems = calendarItems.filter((item) => item.date.startsWith(calendarMonth));
   const todayCalendarItems = calendarItems.filter((item) => item.date === today);
   const todaySchedules = calendarSchedules.filter((item) => item.date === today);
+  const tomorrow = addDaysInput(today, 1);
+  const tomorrowSchedules = calendarSchedules.filter((item) => item.date === tomorrow);
   const selectedDateSchedules = calendarSchedules.filter((item) => item.date === selectedCalendarDate);
   const todayMainSchedule = todaySchedules[0];
   const activeWorkLog = workLogs.find((log) => log.date === workLogDate);
   const activeWorkProgress = [activeWorkLog?.memo, activeWorkLog?.receiptDone, activeWorkLog?.photoDone, activeWorkLog?.invoiceReady].filter(Boolean).length;
   const activeWorkSchedule = calendarSchedules.find((item) => item.date === workLogDate);
+  const todayScheduleSite = todayMainSchedule ? sites.find((site) => site.id === todayMainSchedule.siteId) : undefined;
+  const todayReceipts = receipts.filter((receipt) => receipt.date === today);
   const todaySiteItems = todayCalendarItems.filter((item) => item.kind === "現場");
-  const workerLabel = profile.name || profile.companyName || "自分";
+  const workerLabel = profile.contactName || profile.name || "担当者未登録";
+  const companyLabel = profile.companyName || "所属未登録";
   const mainSiteLabel = todayMainSchedule?.siteName || todaySiteItems[0]?.title || currentSite?.siteName || "現場未登録";
   const mainSiteSub = todayMainSchedule?.workDescription || todaySiteItems[0]?.sub || currentSite?.address || "カレンダーに予定を入れると今日の流れに出ます";
-  const otherTodayItems = todayCalendarItems.filter((item) => item.kind !== "現場");
   const isAdminUser = adminUsers.some((user) => normalizeEmail(user.email) === normalizeEmail(userEmail) && user.role === "admin" && user.status === "active");
+  const todaySiteAddress = todayScheduleSite?.address || currentSite?.address || "";
+  const todayPhotoMemo = todayWorkLog?.photoUrls.length ? `写真 ${todayWorkLog.photoUrls.length}枚を保存済み` : "写真メモはまだありません";
+  const todayWorkDraft = todayWorkLog?.memo || todayMainSchedule?.workDescription || "日報下書きはまだありません";
+  // TODO: 将来 Supabase pg_cron + Edge Function + Web Push で7:00/開始1時間前/15:00/17:00を実配信する。今回はアプリ内通知だけ。
+  const notificationItems = [
+    ...todaySchedules.map((schedule) => ({
+      id: `today-${schedule.id}`,
+      title: "今日の現場",
+      body: `${schedule.siteName || "現場未入力"}${schedule.startTime ? ` / 開始1時間前の目安 ${schedule.startTime}` : ""}`,
+      actions: ["今日の現場を見る", todaySiteAddress ? "地図" : "", "日報下書き"].filter(Boolean)
+    })),
+    ...tomorrowSchedules.map((schedule) => ({
+      id: `tomorrow-${schedule.id}`,
+      title: "明日の現場確認",
+      body: `${schedule.siteName || "現場未入力"} / ${schedule.workDescription || "作業予定"}`,
+      actions: ["明日の予定", "メモ", "地図"]
+    })),
+    ...todaySchedules.filter((schedule) => !workLogs.some((log) => log.date === schedule.date && (!schedule.siteId || log.siteId === schedule.siteId))).map((schedule) => ({
+      id: `worklog-${schedule.id}`,
+      title: "未提出の日報",
+      body: `${schedule.siteName || "今日の現場"}の日報を確認してください`,
+      actions: ["日報下書き"]
+    })),
+    ...unprocessedReceipts.map((receipt) => ({
+      id: `receipt-${receipt.id}`,
+      title: "未処理の領収書",
+      body: `${receipt.storeName || "領収書"} / ${yen.format(receipt.amount || 0)}`,
+      actions: ["領収書を見る"]
+    }))
+  ];
 
   const documentRows = useMemo(
     () => [
@@ -497,6 +538,43 @@ export default function App() {
       return;
     }
     window.location.href = "/print";
+  }
+
+  function openMap(address: string) {
+    if (!address) {
+      setMessage("現場住所を登録すると地図を開けます");
+      return;
+    }
+    window.open(`https://maps.google.com/?q=${encodeURIComponent(address)}`, "_blank", "noopener,noreferrer");
+  }
+
+  async function shareText(title: string, text: string) {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text });
+        setMessage("会社へ共有しました");
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      setMessage("共有内容をコピーしました");
+    } catch (error) {
+      setMessage((error as Error).message || "共有を中止しました");
+    }
+  }
+
+  async function shareTodaySummary() {
+    const lines = [
+      "今日の担当現場",
+      `現場: ${mainSiteLabel}`,
+      `住所: ${todaySiteAddress || "未登録"}`,
+      `予定時間: ${todayMainSchedule?.startTime || "-"}-${todayMainSchedule?.endTime || "-"}`,
+      `担当者: ${workerLabel}`,
+      `会社/所属: ${companyLabel}`,
+      `日報: ${todayWorkDraft}`,
+      `領収書: ${todayReceipts.length}件`,
+      `写真メモ: ${todayPhotoMemo}`
+    ];
+    await shareText("今日の担当現場", lines.join("\n"));
   }
 
   async function readReceiptPhoto(form: HTMLFormElement | null) {
@@ -879,62 +957,68 @@ export default function App() {
 
       {tab === "home" && (
         <div className="grid gap-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-[7fr_3fr]">
-            <button onClick={() => { setCalendarMonth(monthInput()); setSelectedCalendarDate(today); setCalendarAddFocus(false); setTab("calendar"); }} className="tap rounded-lg border border-line bg-white p-5 text-left shadow-soft">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-bold text-genba">カレンダー</p>
-                  <h2 className="mt-1 text-3xl font-black text-ink">{today}</h2>
-                  <p className="mt-2 text-sm text-slate-600">作業員：{workerLabel}</p>
-                </div>
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-skysoft text-genba">
-                  <CalendarDays />
-                </span>
+          <Card className="border-genba">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-black text-genba">今日の担当現場</p>
+                <h2 className="mt-1 break-words text-3xl font-black text-ink">{todayMainSchedule ? mainSiteLabel : "今日の現場を登録しましょう"}</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">今日の現場情報を確認して、必要な記録を残しましょう。</p>
               </div>
-              <div className="mt-4 grid gap-2">
-                <div className="rounded-lg bg-skysoft p-3">
-                  <p className="text-xs font-bold text-slate-500">今日の現場</p>
-                  <p className="mt-1 font-bold text-ink">{mainSiteLabel}</p>
-                  <p className="text-xs text-slate-600">{mainSiteSub}</p>
-                </div>
-                <div className="flex items-center justify-between rounded-lg border border-line bg-white px-3 py-2">
-                  <span className="text-sm font-bold text-ink">今日の予定</span>
-                  <span className="rounded-lg bg-genba px-2 py-1 text-xs font-bold text-white">{todayCalendarItems.length}件</span>
-                </div>
-                {otherTodayItems.slice(0, 2).map((item, index) => (
-                  <div key={`${item.kind}-${item.title}-${index}`} className="rounded-lg border border-line bg-white p-3">
-                    <span className={`rounded-lg px-2 py-1 text-xs font-bold ${calendarKindClass(item.kind)}`}>{item.kind}</span>
-                    <p className="mt-2 font-bold text-ink">{item.title}</p>
-                    <p className="text-xs text-slate-600">{item.sub}</p>
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-skysoft text-genba">
+                <Building2 />
+              </span>
+            </div>
+            {todayMainSchedule ? (
+              <div className="mt-4 grid gap-3">
+                {[
+                  ["現場名", mainSiteLabel],
+                  ["住所", todaySiteAddress || "住所未登録"],
+                  ["予定時間", todayMainSchedule.startTime || todayMainSchedule.endTime ? `${todayMainSchedule.startTime || "-"}-${todayMainSchedule.endTime || "-"}` : "未登録"],
+                  ["担当者", workerLabel],
+                  ["会社/所属", companyLabel],
+                  ["現場メモ", todayMainSchedule.memo || mainSiteSub],
+                  ["今日の日報下書き", todayWorkDraft],
+                  ["今日保存した領収書", `${todayReceipts.length}件`],
+                  ["今日の写真メモ", todayPhotoMemo],
+                  ["明日の予定", tomorrowSchedules[0]?.siteName || "未登録"]
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg bg-skysoft p-3">
+                    <p className="text-xs font-bold text-slate-500">{label}</p>
+                    <p className="mt-1 break-words text-base font-black text-ink">{value}</p>
                   </div>
                 ))}
               </div>
-            </button>
+            ) : (
+              <div className="mt-4 rounded-lg bg-skysoft p-4">
+                <p className="text-lg font-black text-ink">今日の現場を登録しましょう</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">現場を登録して予定に入れると、日報・領収書・写真メモが現場ごとにまとまります。</p>
+              </div>
+            )}
+          </Card>
 
-            <button onClick={() => { setWorkLogDate(today); setTab("todayWork"); }} className="tap rounded-lg border border-genba bg-genba p-4 text-left text-white shadow-soft">
-              <div className="grid gap-3">
-                <span className="grid h-11 w-11 place-items-center rounded-lg bg-white/15">
-                  <CheckCircle2 />
-                </span>
-                <div>
-                  <p className="text-sm font-bold opacity-90">日報記入</p>
-                  <h2 className="mt-1 break-words text-2xl font-black">{today.slice(5).replace("-", "/")}</h2>
-                  <p className="mt-2 text-sm opacity-90">{mainSiteLabel}</p>
-                </div>
-              </div>
-              <div className="mt-4 rounded-lg bg-white/12 p-3">
-                <p className="text-sm font-bold">{todayWorkLog ? `${todayWorkProgress}/4 完了` : "作業員・メモ・写真"}</p>
-                <p className="mt-1 text-xs opacity-80">終わったらここ</p>
-              </div>
-            </button>
+          <div className="grid gap-2">
+            {[
+              { label: "1. 今日の現場を見る", action: () => { setCalendarMonth(monthInput()); setSelectedCalendarDate(today); setCalendarAddFocus(!todayMainSchedule); setTab("calendar"); } },
+              { label: "2. 地図を開く", action: () => openMap(todaySiteAddress) },
+              { label: "3. 日報を確認する", action: () => { setWorkLogDate(today); setTab("todayWork"); } },
+              { label: "4. 領収書を保存", action: () => setTab("receipts") },
+              { label: "5. 写真メモを追加", action: () => { setWorkLogDate(today); setTab("todayWork"); } },
+              { label: "6. 明日の予定を見る", action: () => { setCalendarMonth(tomorrow.slice(0, 7)); setSelectedCalendarDate(tomorrow); setCalendarAddFocus(false); setTab("calendar"); } },
+              { label: "7. 会社へ共有する", action: shareTodaySummary }
+            ].map((item) => (
+              <button key={item.label} type="button" onClick={item.action} className="tap min-h-14 rounded-lg bg-genba px-4 py-3 text-left text-base font-black text-white shadow-soft">
+                {item.label}
+              </button>
+            ))}
           </div>
+
           <Card>
             <div className="grid grid-cols-2 gap-3">
               {[
-                ["今月の売上", yen.format(monthSales)],
-                ["今月の経費", yen.format(monthExpense)],
+                ["今日の予定", `${todaySchedules.length}件`],
+                ["今日の領収書", `${todayReceipts.length}件`],
                 ["未処理の領収書", `${unprocessedReceipts.length}枚`],
-                ["今日の予定", `${todayCalendarItems.length}件`]
+                ["今月の売上", yen.format(monthSales)]
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg bg-skysoft p-3">
                   <p className="text-xs text-slate-500">{label}</p>
@@ -943,22 +1027,25 @@ export default function App() {
               ))}
             </div>
           </Card>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { key: "schedule-add", label: "予定を追加", icon: <CalendarDays key="schedule-add" />, action: () => { setCalendarMonth(monthInput()); setSelectedCalendarDate(today); setCalendarAddFocus(true); setTab("calendar"); } },
-              { key: "receipts", label: "領収書を撮る", icon: <Camera key="a" />, action: () => setTab("receipts") },
-              { key: "invoices", label: "請求書を作る", icon: <FileText key="b" />, action: () => setTab("invoices") },
-              { key: "estimates", label: "見積書を作る", icon: <ClipboardList key="c" />, action: () => setTab("estimates") },
-              { key: "sites", label: "現場を追加", icon: <Building2 key="d" />, action: () => setTab("sites") },
-              { key: "documents", label: "書類一覧", icon: <FileDown key="g" />, action: () => setTab("documents") },
-              { key: "settings", label: "設定", icon: <Settings key="h" />, action: () => setTab("settings") }
-            ].map(({ key, label, icon, action }) => (
-              <button key={key} onClick={action} className="tap grid min-h-28 place-items-center rounded-lg border border-line bg-white p-3 text-center font-bold shadow-soft">
-                <span className="text-genba">{icon}</span>
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
+
+          <Card>
+            <SectionTitle icon={<Bell />} title="通知センター" sub="開いた時に確認する連絡リスト" />
+            {notificationItems.length ? (
+              <div className="grid gap-3">
+                {notificationItems.slice(0, 8).map((item) => (
+                  <div key={item.id} className="rounded-lg border border-line bg-white p-3">
+                    <p className="text-sm font-black text-genba">{item.title}</p>
+                    <p className="mt-1 break-words text-sm leading-6 text-slate-700">{item.body}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {item.actions.map((action) => <span key={action} className="rounded-lg bg-skysoft px-2 py-1 text-xs font-bold text-genba">{action}</span>)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-lg bg-skysoft p-4 text-center text-sm text-slate-600">今日確認する通知はありません</p>
+            )}
+          </Card>
         </div>
       )}
 
