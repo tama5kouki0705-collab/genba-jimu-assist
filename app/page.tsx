@@ -68,6 +68,19 @@ type Tab =
   | "admin"
   | "settings";
 
+type SiteInputValues = {
+  siteName: FormDataEntryValue | null;
+  address?: FormDataEntryValue | null;
+  clientCompany?: FormDataEntryValue | null;
+  clientPerson?: FormDataEntryValue | null;
+  clientPhone?: FormDataEntryValue | null;
+  startDate?: FormDataEntryValue | null;
+  endDate?: FormDataEntryValue | null;
+  workDescription?: FormDataEntryValue | null;
+  dailyRate?: FormDataEntryValue | null;
+  memo?: FormDataEntryValue | null;
+};
+
 const today = localDateInput();
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
 const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
@@ -547,17 +560,25 @@ export default function App() {
   }
 
   async function shareText(title: string, text: string, url?: string) {
+    const copyText = url ? `${text}\n画像: ${url}` : text;
     try {
       if (navigator.share) {
         await navigator.share({ title, text, url });
         setMessage("会社へ共有しました");
         return true;
       }
-      await navigator.clipboard.writeText(text);
+    } catch (error) {
+      if ((error as Error).name === "AbortError") {
+        setMessage("共有を中止しました");
+        return false;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(copyText);
       setMessage("共有内容をコピーしました");
       return true;
     } catch (error) {
-      setMessage((error as Error).message || "共有を中止しました");
+      setMessage("共有シートを開けませんでした。内容を手動でコピーしてください");
       return false;
     }
   }
@@ -596,20 +617,19 @@ export default function App() {
     if (shared) setReceipts(receipts.map((item) => item.id === receipt.id ? { ...item, submitted: true } : item));
   }
 
-  async function saveSiteFromForm(form: HTMLFormElement, successMessage = "現場を登録しました") {
-    const fd = new FormData(form);
+  async function saveSite(values: SiteInputValues, successMessage = "現場を登録しました") {
     const site: Site = {
       id: uid("site"),
-      siteName: String(fd.get("siteName") || "").trim(),
-      address: String(fd.get("address") || "").trim(),
-      clientCompany: String(fd.get("clientCompany") || "").trim(),
-      clientPerson: String(fd.get("clientPerson") || "").trim(),
-      clientPhone: String(fd.get("clientPhone") || "").trim(),
-      startDate: String(fd.get("startDate") || ""),
-      endDate: String(fd.get("endDate") || ""),
-      workDescription: String(fd.get("workDescription") || "").trim(),
-      dailyRate: num(fd.get("dailyRate")),
-      memo: String(fd.get("memo") || "").trim()
+      siteName: String(values.siteName || "").trim(),
+      address: String(values.address || "").trim(),
+      clientCompany: String(values.clientCompany || "").trim(),
+      clientPerson: String(values.clientPerson || "").trim(),
+      clientPhone: String(values.clientPhone || "").trim(),
+      startDate: String(values.startDate || ""),
+      endDate: String(values.endDate || ""),
+      workDescription: String(values.workDescription || "").trim(),
+      dailyRate: num(values.dailyRate || null),
+      memo: String(values.memo || "").trim()
     };
     if (!site.siteName) {
       setMessage("現場名を入力してください");
@@ -617,9 +637,41 @@ export default function App() {
     }
     setSites([site, ...sites]);
     await saveRemote((id) => saveSiteRemote(site, id));
-    form.reset();
     setMessage(successMessage);
     return site;
+  }
+
+  async function saveSiteFromForm(form: HTMLFormElement, successMessage = "現場を登録しました") {
+    const fd = new FormData(form);
+    const site = await saveSite({
+      siteName: fd.get("siteName"),
+      address: fd.get("address"),
+      clientCompany: fd.get("clientCompany"),
+      clientPerson: fd.get("clientPerson"),
+      clientPhone: fd.get("clientPhone"),
+      startDate: fd.get("startDate"),
+      endDate: fd.get("endDate"),
+      workDescription: fd.get("workDescription"),
+      dailyRate: fd.get("dailyRate"),
+      memo: fd.get("memo")
+    }, successMessage);
+    if (site) form.reset();
+    return site;
+  }
+
+  async function saveQuickSiteFromContainer(container: HTMLElement) {
+    const field = (name: string) => container.querySelector<HTMLInputElement>(`[name="${name}"]`)?.value ?? "";
+    const site = await saveSite({
+      siteName: field("quickSiteName"),
+      address: field("quickAddress"),
+      clientCompany: field("quickClientCompany"),
+      workDescription: field("quickWorkDescription"),
+      dailyRate: field("quickDailyRate")
+    }, "現場を追加しました。予定の現場欄で選べます");
+    if (!site) return;
+    container.querySelectorAll<HTMLInputElement>("input").forEach((input) => {
+      input.value = "";
+    });
   }
 
   async function saveWorkLogFromForm(form: HTMLFormElement) {
@@ -661,8 +713,8 @@ export default function App() {
     const date = String(fd.get("date") || selectedCalendarDate || today);
     const siteId = String(fd.get("siteId") || "");
     const site = sites.find((item) => item.id === siteId);
-    const siteName = String(fd.get("siteName") || site?.siteName || "").trim();
-    const clientCompany = String(fd.get("clientCompany") || site?.clientCompany || "").trim();
+    const siteName = String(site?.siteName || fd.get("siteName") || "").trim();
+    const clientCompany = String(site?.clientCompany || fd.get("clientCompany") || "").trim();
     const dailyRate = num(fd.get("dailyRate")) || site?.dailyRate || 25000;
     const schedule: CalendarSchedule = {
       id: uid("schedule"),
@@ -854,26 +906,26 @@ export default function App() {
       ) : null}
       <details className="mb-3 rounded-lg border border-line bg-skysoft p-3">
         <summary className="cursor-pointer text-sm font-black text-genba">この画面で現場を追加</summary>
-        <form className="mt-3 grid gap-3" onSubmit={async (e) => {
-          e.preventDefault();
-          await saveSiteFromForm(e.currentTarget, "現場を追加しました。予定の現場欄で選べます");
-        }}>
-          <Field label="現場名" name="siteName" required />
-          <Field label="住所" name="address" />
-          <Field label="会社名" name="clientCompany" />
-          <Field label="作業内容" name="workDescription" />
-          <Field label="人工単価" name="dailyRate" type="number" />
-          <SaveButton label="現場を追加する" />
-        </form>
+        <div data-quick-site className="mt-3 grid gap-3">
+          <Field label="現場名" name="quickSiteName" required />
+          <Field label="住所" name="quickAddress" />
+          <Field label="会社名 / 共有先" name="quickClientCompany" />
+          <Field label="作業内容" name="quickWorkDescription" />
+          <Field label="人工単価" name="quickDailyRate" type="number" />
+          <button type="button" onClick={async (e) => {
+            const container = e.currentTarget.closest<HTMLElement>("[data-quick-site]");
+            if (container) await saveQuickSiteFromContainer(container);
+          }} className="tap rounded-lg bg-genba px-4 py-3 font-bold text-white">現場を追加する</button>
+        </div>
       </details>
       <form key={selectedCalendarDate} className="grid gap-3" onSubmit={async (e) => {
         e.preventDefault();
         await saveCalendarScheduleFromForm(e.currentTarget);
       }}>
         <Field label="日付" name="date" type="date" defaultValue={selectedCalendarDate} />
-        <SiteSelect sites={sites} defaultValue={currentSite?.id} />
+        <SiteSelect key={currentSite?.id || "no-site"} sites={sites} defaultValue={currentSite?.id} />
         <Field label="現場名" name="siteName" placeholder="例：渋谷マンション改修" />
-        <Field label="請求先会社名" name="clientCompany" placeholder="例：山田建設" />
+        <Field label="会社名 / 共有先" name="clientCompany" placeholder="例：山田建設" />
         <Field label="作業内容" name="workDescription" required placeholder="例：電気配線、器具付け" />
         <div className="grid grid-cols-2 gap-2">
           <Field label="開始予定時刻" name="startTime" type="time" />
