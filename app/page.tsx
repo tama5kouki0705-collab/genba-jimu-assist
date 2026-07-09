@@ -90,6 +90,8 @@ const BRAND_CHARACTER_SRC = "/dandori-kun.jpg";
 const receiptPurposeOptions = ["材料", "工具・道具", "交通", "駐車場", "高速", "燃料", "消耗品", "外注", "その他"];
 // 請求書・見積書機能。復活手順：この値をtrueに戻すだけ。関連コードは lib/invoice-workflow.ts / lib/pdf-documents.ts / page.tsx の MoneySection。
 const ENABLE_BILLING = false;
+// Googleログイン。Supabase側のOAuth設定確認後、テスト配布で使う場合はtrueに戻す。
+const ENABLE_GOOGLE_LOGIN = false;
 
 function addDaysInput(dateInput: string, days: number) {
   const date = dateInput ? new Date(dateInput) : new Date();
@@ -473,6 +475,11 @@ export default function App() {
       return;
     }
 
+    if (mode === "google" && !ENABLE_GOOGLE_LOGIN) {
+      setMessage("テスト配布中はメールとパスワードでログインしてください");
+      return;
+    }
+
     if (mode === "google" && supabase) {
       await supabase.auth.signInWithOAuth({ provider: "google" });
       return;
@@ -501,7 +508,7 @@ export default function App() {
         return;
       }
       if (mode === "signup" && result.data.user) {
-        setMessage("確認メールを送りました。\n1. メールを開く\n2. 青い確認ボタンを押す\n3. この画面に戻ってログイン\n迷惑メールフォルダも確認してください");
+        setMessage("確認メールを送りました。\n①メールを開く\n②メール内の確認ボタンを押す\n③この画面に戻ってログイン\nメールが見つからないときは迷惑メールフォルダも確認してください");
         setIsAuthBusy(false);
         return;
       }
@@ -1032,7 +1039,7 @@ export default function App() {
             <input className="hidden" value={email} onChange={() => undefined} />
             <button disabled={isAuthBusy} onClick={() => signIn("login")} className="tap rounded-lg bg-genba px-4 py-3 text-lg font-bold text-white disabled:opacity-60">{isAuthBusy ? "確認中..." : "ログイン"}</button>
             <button disabled={isAuthBusy} onClick={() => signIn("signup")} className="tap rounded-lg border border-genba bg-white px-4 py-3 font-bold text-genba disabled:opacity-60">新しく登録</button>
-            {hasSupabase ? <button disabled={isAuthBusy} onClick={() => signIn("google")} className="tap rounded-lg border border-line bg-white px-4 py-3 font-bold disabled:opacity-60">Googleでログイン</button> : null}
+            {hasSupabase && ENABLE_GOOGLE_LOGIN ? <button disabled={isAuthBusy} onClick={() => signIn("google")} className="tap rounded-lg border border-line bg-white px-4 py-3 font-bold disabled:opacity-60">Googleでログイン</button> : null}
             {hasSupabase ? <button disabled={isAuthBusy} onClick={sendPasswordReset} className="tap rounded-lg border border-line bg-white px-4 py-3 text-sm font-bold text-slate-700 disabled:opacity-60">パスワードを忘れた</button> : null}
             <button disabled={isAuthBusy} onClick={() => signIn("demo")} className="tap rounded-lg bg-skysoft px-4 py-3 font-bold text-genba disabled:opacity-60">お試し画面を見る</button>
           </div>
