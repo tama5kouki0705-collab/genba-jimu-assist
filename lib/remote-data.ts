@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { normalizeInvoiceLineItems } from "@/lib/invoice-line-items";
-import type { AdminUser, CalendarSchedule, Estimate, Invoice, Profile, Qualification, Receipt, Site, Vehicle, WorkLog } from "@/lib/types";
+import { shouldRetryWorkLogWithoutVoiceReportColumns } from "@/lib/remote-fallbacks";
+import type { AdminUser, CalendarSchedule, Estimate, Invoice, Profile, Qualification, Receipt, RosterMember, Site, Vehicle, WorkLog } from "@/lib/types";
 
 const FILE_BUCKET = "genba-files";
 const SIGNED_IMAGE_SECONDS = 60 * 60 * 24 * 7;
@@ -151,6 +152,7 @@ const workLogToDb = (workLog: WorkLog, userId: string) => ({
   workers: workLog.workers,
   memo: workLog.memo,
   weather: workLog.weather || "☀️",
+  trade: workLog.trade || null,
   progress_percent: workLog.progressPercent ?? 0,
   foreman: workLog.foreman || "自分",
   machinery: workLog.machinery || "",
@@ -163,8 +165,15 @@ const workLogToDb = (workLog: WorkLog, userId: string) => ({
   invoice_ready: workLog.invoiceReady,
   created_at: workLog.createdAt || new Date().toISOString(),
   updated_at: workLog.updatedAt || new Date().toISOString(),
+  work_start_at: workLog.workStartAt || null,
+  work_end_at: workLog.workEndAt || null,
   trade_details: workLog.tradeDetails && Object.keys(workLog.tradeDetails).length > 0 ? workLog.tradeDetails : null
 });
+
+const workLogToDbWithoutVoiceReportColumns = (workLog: WorkLog, userId: string) => {
+  const { trade, work_start_at, work_end_at, ...row } = workLogToDb(workLog, userId);
+  return row;
+};
 
 const workLogFromDb = (row: any): WorkLog => ({
   id: row.app_id ?? row.id,
@@ -174,6 +183,7 @@ const workLogFromDb = (row: any): WorkLog => ({
   workers: row.workers ?? "",
   memo: row.memo ?? "",
   weather: row.weather ?? "☀️",
+  trade: row.trade ?? "",
   progressPercent: Number(row.progress_percent ?? 0),
   foreman: row.foreman ?? "自分",
   machinery: row.machinery ?? "",
@@ -186,7 +196,24 @@ const workLogFromDb = (row: any): WorkLog => ({
   invoiceReady: Boolean(row.invoice_ready),
   createdAt: row.created_at ?? "",
   updatedAt: row.updated_at ?? row.created_at ?? "",
+  workStartAt: row.work_start_at ?? "",
+  workEndAt: row.work_end_at ?? "",
   tradeDetails: row.trade_details && typeof row.trade_details === "object" ? row.trade_details : null
+});
+
+const rosterMemberToDb = (member: RosterMember, userId: string) => ({
+  id: member.id,
+  user_id: userId,
+  name: member.name,
+  active: member.active,
+  created_at: member.createdAt || new Date().toISOString()
+});
+
+const rosterMemberFromDb = (row: any): RosterMember => ({
+  id: row.id,
+  name: row.name ?? "",
+  active: row.active ?? true,
+  createdAt: row.created_at ?? ""
 });
 
 const calendarScheduleToDb = (schedule: CalendarSchedule, userId: string) => ({
@@ -398,6 +425,7 @@ export async function loadRemoteData() {
     vehicles,
     invoices,
     estimates,
+    roster,
     users
   ] = await Promise.all([
     supabase.from("profiles").select("*").limit(1),
@@ -409,6 +437,7 @@ export async function loadRemoteData() {
     supabase.from("vehicles").select("*").order("created_at", { ascending: false }),
     supabase.from("invoices").select("*").order("created_at", { ascending: false }),
     supabase.from("estimates").select("*").order("created_at", { ascending: false }),
+    supabase.from("roster").select("*").order("created_at", { ascending: true }),
     supabase.from("users").select("*").order("created_at", { ascending: false })
   ]);
 
@@ -425,6 +454,7 @@ export async function loadRemoteData() {
     vehicles: (vehicles.data ?? []).map(vehicleFromDb),
     invoices: (invoices.data ?? []).map(invoiceFromDb),
     estimates: (estimates.data ?? []).map(estimateFromDb),
+    roster: roster.error ? null : (roster.data ?? []).map(rosterMemberFromDb),
     adminUsers: users.error ? null : (users.data ?? []).map((row: any): AdminUser => ({
       id: row.id,
       email: row.email,
@@ -467,6 +497,17 @@ export async function deleteReceiptRemote(receiptId: string) {
 export async function saveWorkLogRemote(workLog: WorkLog, userId: string) {
   if (!supabase) return;
   const { error } = await supabase.from("work_logs").upsert(workLogToDb(workLog, userId), { onConflict: "app_id" });
+  if (error && shouldRetryWorkLogWithoutVoiceReportColumns(error.message)) {
+    const fallback = await supabase.from("work_logs").upsert(workLogToDbWithoutVoiceReportColumns(workLog, userId), { onConflict: "app_id" });
+    if (fallback.error) throw fallback.error;
+    return;
+  }
+  if (error) throw error;
+}
+
+export async function saveRosterMemberRemote(member: RosterMember, userId: string) {
+  if (!supabase) return;
+  const { error } = await supabase.from("roster").upsert(rosterMemberToDb(member, userId));
   if (error) throw error;
 }
 
