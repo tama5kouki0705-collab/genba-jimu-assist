@@ -1,7 +1,7 @@
 {
-  "name": "現場事務アシスト",
-  "short_name": "現場事務アシスト",
-  "description": "現場責任者向けの記録アシスタント。日報・領収書・写真メモを現場ごとにまとめて会社へ共有",
+  "name": "段取　命　君",
+  "short_name": "段取命君",
+  "description": "職長から始める、現場の記録アプリ。日報・領収書・写真メモを現場ごとにまとめて会社へ共有",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f7fbff",

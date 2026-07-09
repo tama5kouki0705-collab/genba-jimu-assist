@@ -60,6 +60,13 @@ export type WorkLog = {
   siteName: string;
   workers: string;
   memo: string;
+  weather: string;
+  progressPercent: number;
+  foreman: string;
+  machinery: string;
+  wasteRecord: string;
+  tomorrowPlan: string;
+  notes: string;
   photoUrls: string[];
   receiptDone: boolean;
   photoDone: boolean;
