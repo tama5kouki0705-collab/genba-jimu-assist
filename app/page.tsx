@@ -147,6 +147,10 @@ function formatSavedTime(value: string) {
   return date.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
 }
 
+function confirmDelete() {
+  return window.confirm("本当に削除しますか？元に戻せません");
+}
+
 function extractWorkerNames(workers: string) {
   const names = workers
     .replace(/作業責任者[:：]/g, "")
@@ -999,6 +1003,7 @@ export default function App() {
   }
 
   async function deleteCalendarSchedule(scheduleId: string) {
+    if (!confirmDelete()) return;
     setCalendarSchedules(calendarSchedules.filter((item) => item.id !== scheduleId));
     await saveRemote(() => deleteCalendarScheduleRemote(scheduleId));
     setMessage("予定を削除しました");
@@ -1023,6 +1028,7 @@ export default function App() {
   }
 
   async function deleteReceipt(receiptId: string) {
+    if (!confirmDelete()) return;
     setReceipts(receipts.filter((item) => item.id !== receiptId));
     if (editingReceiptId === receiptId) resetReceiptForm();
     await saveRemote(() => deleteReceiptRemote(receiptId));
@@ -2259,6 +2265,7 @@ function MoneySection({
 
   function removeInvoiceDraftLineItem(lineId: string, index: number) {
     if (index < MIN_INVOICE_LINE_ITEMS) return;
+    if (!confirmDelete()) return;
     setInvoiceDraftLineItems((lineItems) => lineItems.filter((lineItem) => lineItem.id !== lineId));
   }
 
@@ -2281,6 +2288,7 @@ function MoneySection({
   }
 
   async function deleteMoneyItem(item: Invoice | Estimate) {
+    if (!confirmDelete()) return;
     setItems(items.filter((nextItem: any) => nextItem.id !== item.id));
     await saveRemote(() => isInvoice ? deleteInvoiceRemote(item.id) : deleteEstimateRemote(item.id));
   }
