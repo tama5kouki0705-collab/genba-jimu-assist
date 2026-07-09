@@ -1134,7 +1134,7 @@ export default function App() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-black text-genba">今日の担当現場</p>
-                <h2 className="mt-1 break-words text-3xl font-black text-ink">{hasSites ? mainSiteLabel : "現場を登録しましょう"}</h2>
+                <h2 className="mt-1 break-all text-2xl font-black leading-tight text-ink">{hasSites ? mainSiteLabel : "現場を登録しましょう"}</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">今日の現場情報を確認して、必要な記録を残しましょう。</p>
               </div>
               <span className="h-12 w-12 shrink-0 overflow-hidden rounded-full border border-line bg-white shadow-soft">
@@ -1146,20 +1146,20 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => { setWorkLogDate(today); setTab("todayWork"); }}
-                  className="tap min-h-16 rounded-lg bg-genba px-4 py-4 text-left text-xl font-black text-white shadow-soft"
+                  className="tap min-h-14 w-full min-w-0 whitespace-normal rounded-lg bg-genba px-3 py-3 text-left text-lg font-black leading-tight text-white shadow-soft"
                 >
                   日報を終わらせる
                 </button>
                 <div className="grid gap-1 rounded-lg bg-skysoft p-2">
                   <div className="rounded-md bg-white px-2 py-1.5">
                     <p className="text-[11px] font-bold text-slate-500">現場名</p>
-                    <p className="break-words text-sm font-black text-ink">{mainSiteLabel}</p>
+                    <p className="break-all text-sm font-black text-ink">{mainSiteLabel}</p>
                   </div>
                   <div className="rounded-md bg-white px-2 py-1.5">
                     <div className="flex min-w-0 items-center justify-between gap-2">
                       <div className="min-w-0">
                         <p className="text-[11px] font-bold text-slate-500">現場住所</p>
-                        <p className="break-words text-sm font-black text-ink">{todaySiteAddress || "住所未登録"}</p>
+                        <p className="break-all text-sm font-black text-ink">{todaySiteAddress || "住所未登録"}</p>
                       </div>
                       <button type="button" onClick={copyTodayAddress} className="tap shrink-0 rounded-md border border-genba bg-white px-2 py-1 text-xs font-black text-genba">
                         コピー
@@ -1178,7 +1178,7 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-1">
                     <div className="rounded-md bg-white px-2 py-1.5">
                       <p className="text-[11px] font-bold text-slate-500">人数</p>
-                      <p className="break-words text-sm font-black text-ink">{todayPeopleLabel}</p>
+                      <p className="break-all text-sm font-black text-ink">{todayPeopleLabel}</p>
                     </div>
                     <div className="rounded-md bg-white px-2 py-1.5">
                       <p className="text-[11px] font-bold text-slate-500">今日の領収書</p>
@@ -1215,7 +1215,7 @@ export default function App() {
               { label: "3. 明日の予定を見る", action: () => { setCalendarMonth(tomorrow.slice(0, 7)); setSelectedCalendarDate(tomorrow); setCalendarAddFocus(false); setTab("calendar"); } },
               { label: "4. 会社へ共有する", action: shareTodaySummary }
             ].map((item) => (
-              <button key={item.label} type="button" onClick={item.action} className="tap min-h-14 rounded-lg bg-genba px-4 py-3 text-left text-base font-black text-white shadow-soft">
+              <button key={item.label} type="button" onClick={item.action} className="tap min-h-14 w-full min-w-0 whitespace-normal rounded-lg bg-genba px-4 py-3 text-left text-base font-black text-white shadow-soft">
                 {item.label}
               </button>
             ))}
@@ -1255,7 +1255,7 @@ export default function App() {
 
       {tab === "todayWork" && (
         <div className="grid gap-4">
-          <Card className="bg-genba text-white">
+          <Card className="!bg-genba text-white">
             <p className="text-sm opacity-90">日報記入</p>
             <h2 className="mt-1 text-2xl font-black">{workLogDate}</h2>
             <p className="mt-2 text-sm opacity-90">{activeWorkLog ? `進捗 ${activeWorkProgressPercent}% まで記録済み` : activeWorkSchedule ? "カレンダー予定と現場管理から日報を書けます" : "現場管理の内容をもとに手入力できます"}</p>
