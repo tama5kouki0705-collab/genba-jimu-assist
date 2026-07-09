@@ -50,7 +50,7 @@ import { INVOICE_LINE_ITEM_CATEGORIES, INVOICE_LINE_ITEM_UNITS, MAX_INVOICE_LINE
 import { STORAGE_ERROR_EVENT, STORAGE_LIMIT_MESSAGE, accountKey, getLocalAccounts, hashPassword, normalizeEmail, saveLocalAccounts, setLocalStorageItem, useStoredState } from "@/lib/local-state";
 import { buildPrintableDocumentHtml } from "@/lib/pdf-documents";
 import { receiptStatusLabel } from "@/lib/receipt-domain";
-import { compactTradeDetails, getTradeReportConfig, type TradeDetails, type TradeReportField } from "@/lib/trade-report-fields";
+import { compactTradeDetails, formatTradeDetails, getTradeReportConfig, type TradeDetails, type TradeReportField } from "@/lib/trade-report-fields";
 import type { AdminUser, CalendarSchedule, Estimate, Invoice, InvoiceLineItem, Plan, Profile, Qualification, Receipt, Site, Vehicle, WorkLog } from "@/lib/types";
 
 type Tab =
@@ -550,6 +550,8 @@ export default function App() {
   const activeWorkSiteId = activeWorkLog?.siteId || activeWorkSchedule?.siteId || activeWorkSite?.id || "";
   const activeTradeConfig = getTradeReportConfig(profile.trade || "");
   const shouldShowCommonMachineryWaste = activeTradeConfig?.trade !== "解体" || Boolean(activeWorkLog?.machinery || activeWorkLog?.wasteRecord);
+  const activeWorkTradeRows = formatTradeDetails(activeTradeConfig, activeWorkLog?.tradeDetails ?? null);
+  const todayWorkTradeRows = formatTradeDetails(activeTradeConfig, todayWorkLog?.tradeDetails ?? null);
   const previousWorkProgressLog = activeWorkSiteId ? workLogs
     .filter((log) => log.siteId === activeWorkSiteId && log.date < workLogDate && log.id !== activeWorkLog?.id)
     .sort((a, b) => b.date.localeCompare(a.date))[0] : undefined;
@@ -926,6 +928,7 @@ export default function App() {
       `人数: ${todayPeopleLabel}`,
       `メモ: ${todayHomeMemo || "未入力"}`,
       `日報: ${todayWorkDraft}`,
+      ...todayWorkTradeRows.map(([label, value]) => `${label}: ${value}`),
       `領収書: ${todayReceipts.length}件`,
       `写真メモ: ${todayPhotoMemo}`
     ];
@@ -1672,6 +1675,7 @@ export default function App() {
                   ["本日の作業内容", activeWorkLog.memo],
                   ["重機・車両の稼働状況", activeWorkLog.machinery || ""],
                   ["産業廃棄物の搬出記録", activeWorkLog.wasteRecord || ""],
+                  ...activeWorkTradeRows,
                   ["明日の作業予定・必要な段取り", activeWorkLog.tomorrowPlan || ""],
                   ["特記事項・連絡事項", activeWorkLog.notes || ""]
                 ].filter(([, value]) => value).map(([label, value]) => (
@@ -1901,13 +1905,23 @@ export default function App() {
                 </div>
               </div>
               <div className="mt-4 grid gap-2">
-                {editingSiteWorkLogs.slice(0, 5).map((log) => (
-                  <div key={log.id} className="rounded-lg border border-line bg-white p-3">
-                    <p className="text-xs font-bold text-genba">{log.date}</p>
-                    <p className="mt-1 break-words text-sm font-bold text-ink">{log.memo || "作業内容未入力"}</p>
-                    <p className="mt-1 text-xs text-slate-600">写真 {log.photoUrls.length}枚</p>
-                  </div>
-                ))}
+                {editingSiteWorkLogs.slice(0, 5).map((log) => {
+                  const tradeRows = formatTradeDetails(activeTradeConfig, log.tradeDetails);
+                  return (
+                    <div key={log.id} className="rounded-lg border border-line bg-white p-3">
+                      <p className="text-xs font-bold text-genba">{log.date}</p>
+                      <p className="mt-1 break-words text-sm font-bold text-ink">{log.memo || "作業内容未入力"}</p>
+                      {tradeRows.length ? (
+                        <div className="mt-2 grid gap-1 rounded-lg bg-skysoft p-2">
+                          {tradeRows.map(([label, value]) => (
+                            <p key={label} className="break-words text-xs leading-5 text-slate-700"><span className="font-bold text-genba">{label}：</span>{value}</p>
+                          ))}
+                        </div>
+                      ) : null}
+                      <p className="mt-1 text-xs text-slate-600">写真 {log.photoUrls.length}枚</p>
+                    </div>
+                  );
+                })}
                 {editingSiteWorkLogs.length === 0 ? <p className="rounded-lg bg-skysoft p-3 text-sm text-slate-600">この現場の日報はまだありません</p> : null}
               </div>
               {editingSitePhotos.length ? (
