@@ -140,6 +140,13 @@ function clampProgressPercent(value: FormDataEntryValue | string | number | null
   return Math.max(0, Math.min(100, Math.round(parsed)));
 }
 
+function formatSavedTime(value: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+}
+
 function extractWorkerNames(workers: string) {
   const names = workers
     .replace(/作業責任者[:：]/g, "")
@@ -258,6 +265,7 @@ export default function App() {
   const [workLogWorkersEnabled, setWorkLogWorkersEnabled] = useState(false);
   const [workLogWorkerInputCount, setWorkLogWorkerInputCount] = useState(1);
   const [workLogProgressInput, setWorkLogProgressInput] = useState("0");
+  const [isWorkLogDirty, setIsWorkLogDirty] = useState(false);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
@@ -390,6 +398,7 @@ export default function App() {
   const activeWorkLog = workLogs.find((log) => log.date === workLogDate);
   const activeWorkProgressPercent = activeWorkLog ? clampProgressPercent(activeWorkLog.progressPercent) : 0;
   const activeWorkWeather = activeWorkLog?.weather || "☀️";
+  const activeWorkSavedTime = formatSavedTime(activeWorkLog?.updatedAt || activeWorkLog?.createdAt || "");
   const activeWorkSchedule = calendarSchedules.find((item) => item.date === workLogDate && (!activeWorkLog?.siteId || item.siteId === activeWorkLog.siteId));
   const activeWorkSite = (activeWorkLog?.siteId ? sites.find((site) => site.id === activeWorkLog.siteId) : undefined)
     || (activeWorkSchedule?.siteId ? sites.find((site) => site.id === activeWorkSchedule.siteId) : undefined)
@@ -433,7 +442,18 @@ export default function App() {
   useEffect(() => {
     if (tab !== "todayWork") return;
     setWorkLogProgressInput(String(workLogInitialProgressPercent));
+    setIsWorkLogDirty(false);
   }, [activeWorkLog?.id, tab, workLogDate, workLogInitialProgressPercent]);
+
+  useEffect(() => {
+    if (!isWorkLogDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isWorkLogDirty]);
 
   const homeStats = [
     ["今日の予定", `${todaySchedules.length}件`],
@@ -441,6 +461,14 @@ export default function App() {
     ["未処理の領収書", `${unprocessedReceipts.length}枚`],
     ...(ENABLE_BILLING ? [["今月の売上", yen.format(monthSales)]] : [])
   ];
+
+  function requestTabChange(nextTab: Tab) {
+    if (tab === "todayWork" && nextTab !== "todayWork" && isWorkLogDirty && !window.confirm("書きかけの日報があります。保存せずに移動しますか？")) {
+      return;
+    }
+    setTab(nextTab);
+  }
+
   // TODO: 将来 Supabase pg_cron + Edge Function + Web Push で7:00/開始1時間前/15:00/17:00を実配信する。今回はアプリ内通知だけ。
   const notificationItems = [
     ...todaySchedules.map((schedule) => ({
@@ -872,6 +900,7 @@ export default function App() {
       return;
     }
     const existing = workLogs.find((log) => log.date === date);
+    const updatedAt = new Date().toISOString();
     const workLog: WorkLog = {
       id: existing?.id ?? uid("work"),
       date,
@@ -890,10 +919,12 @@ export default function App() {
       receiptDone: existing?.receiptDone ?? receipts.some((receipt) => receipt.date === date),
       photoDone: Boolean(existing?.photoDone || existing?.photoUrls.length || newPhotos.length),
       invoiceReady: ENABLE_BILLING ? fd.get("invoiceReady") === "on" : existing?.invoiceReady ?? false,
-      createdAt: existing?.createdAt ?? new Date().toISOString()
+      createdAt: existing?.createdAt ?? updatedAt,
+      updatedAt
     };
     setWorkLogs([workLog, ...workLogs.filter((log) => log.id !== workLog.id)]);
     await saveRemote((id) => saveWorkLogRemote(workLog, id));
+    setIsWorkLogDirty(false);
     setMessage("日報を保存しました。おつかれさまです");
   }
 
@@ -1143,7 +1174,7 @@ export default function App() {
             <h1 className="text-2xl font-black">{BRAND_NAME}</h1>
             <p className="mt-1 text-xs text-slate-500">{syncStatus}</p>
           </div>
-          <button onClick={() => setTab("settings")} className="grid h-12 w-12 place-items-center rounded-lg bg-white text-genba shadow-soft" aria-label="メニュー">
+          <button onClick={() => requestTabChange("settings")} className="grid h-12 w-12 place-items-center rounded-lg bg-white text-genba shadow-soft" aria-label="メニュー">
             <Menu />
           </button>
         </div>
@@ -1166,7 +1197,7 @@ export default function App() {
               <div className="mt-3 grid gap-2">
                 <button
                   type="button"
-                  onClick={() => { setWorkLogDate(today); setTab("todayWork"); }}
+                  onClick={() => { setWorkLogDate(today); requestTabChange("todayWork"); }}
                   className="tap min-h-14 w-full min-w-0 whitespace-normal rounded-lg bg-genba px-3 py-3 text-left text-lg font-black leading-tight text-white shadow-soft"
                 >
                   日報を終わらせる
@@ -1220,7 +1251,7 @@ export default function App() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setTab("sites")}
+                  onClick={() => requestTabChange("sites")}
                   className="tap mt-4 min-h-14 w-full animate-pulse rounded-lg border-2 border-genba bg-white px-4 py-3 text-left text-base font-black text-genba shadow-soft"
                 >
                   現場を登録しましょう
@@ -1231,9 +1262,9 @@ export default function App() {
 
           <div className="grid gap-2">
             {[
-              { label: "1. 領収書を保存", action: () => setTab("receipts") },
-              { label: "2. 写真メモを追加", action: () => { setWorkLogDate(today); setTab("todayWork"); } },
-              { label: "3. 明日の予定を見る", action: () => { setCalendarMonth(tomorrow.slice(0, 7)); setSelectedCalendarDate(tomorrow); setCalendarAddFocus(false); setTab("calendar"); } },
+              { label: "1. 領収書を保存", action: () => requestTabChange("receipts") },
+              { label: "2. 写真メモを追加", action: () => { setWorkLogDate(today); requestTabChange("todayWork"); } },
+              { label: "3. 明日の予定を見る", action: () => { setCalendarMonth(tomorrow.slice(0, 7)); setSelectedCalendarDate(tomorrow); setCalendarAddFocus(false); requestTabChange("calendar"); } },
               { label: "4. 会社へ共有する", action: shareTodaySummary }
             ].map((item) => (
               <button key={item.label} type="button" onClick={item.action} className="tap min-h-14 w-full min-w-0 whitespace-normal rounded-lg bg-genba px-4 py-3 text-left text-base font-black text-white shadow-soft">
@@ -1284,10 +1315,11 @@ export default function App() {
 
           <Card>
             <SectionTitle icon={<CheckCircle2 />} title="日報" sub="現場の進み具合と明日の段取りを残します" />
+            {activeWorkSavedTime ? <p className="mb-3 rounded-lg bg-skysoft p-3 text-sm font-bold text-genba">保存済み・最終更新 {activeWorkSavedTime}</p> : null}
             <form key={`${workLogDate}-${activeWorkLog?.id || activeWorkSchedule?.id || activeWorkSite?.id || "new"}-${activeWorkerKey}`} className="grid gap-3" onSubmit={async (e) => {
               e.preventDefault();
               await saveWorkLogFromForm(e.currentTarget);
-            }}>
+            }} onChange={() => setIsWorkLogDirty(true)}>
               <input type="hidden" name="date" value={activeWorkLog?.date || workLogDate} readOnly />
               <input type="hidden" name="siteId" value={activeWorkLog?.siteId || activeWorkSchedule?.siteId || activeWorkSite?.id || ""} readOnly />
               <input type="hidden" name="siteName" value={activeWorkSiteName} readOnly />
@@ -1390,7 +1422,10 @@ export default function App() {
                         key={percent}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => setWorkLogProgressInput(String(percent))}
+                        onClick={() => {
+                          setWorkLogProgressInput(String(percent));
+                          setIsWorkLogDirty(true);
+                        }}
                         className={`tap min-h-10 rounded-lg border px-2 py-2 text-sm font-black ${selected ? "border-genba bg-genba text-white" : "border-line bg-skysoft text-genba"}`}
                       >
                         {percent}%
@@ -1454,7 +1489,7 @@ export default function App() {
                 </div>
               ) : null}
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <button onClick={() => setTab("receipts")} className="tap rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">領収書を撮る</button>
+                <button onClick={() => requestTabChange("receipts")} className="tap rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">領収書を撮る</button>
                 {ENABLE_BILLING ? <button onClick={() => createInvoiceFromWorkLog(activeWorkLog)} className="tap rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">請求書に回す</button> : null}
               </div>
             </Card>
@@ -1531,7 +1566,7 @@ export default function App() {
                       <p className="shrink-0 rounded-lg bg-white px-3 py-2 text-sm font-black text-genba">{yen.format((schedule.laborCount || 1) * (schedule.dailyRate || 0))}</p>
                     </div>
                     <div className={`mt-3 grid grid-cols-1 gap-2 ${ENABLE_BILLING ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
-                      <button type="button" onClick={() => { setWorkLogDate(schedule.date); setTab("todayWork"); }} className="tap min-h-12 rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">日報を書く</button>
+                      <button type="button" onClick={() => { setWorkLogDate(schedule.date); requestTabChange("todayWork"); }} className="tap min-h-12 rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">日報を書く</button>
                       {ENABLE_BILLING ? <button type="button" onClick={() => createInvoiceFromSchedule(schedule)} className="tap min-h-12 rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">{schedule.invoiceId ? "請求書を再作成" : "請求書に回す"}</button> : null}
                       <button type="button" onClick={() => deleteCalendarSchedule(schedule.id)} className="tap min-h-12 rounded-lg border border-red-200 bg-white px-3 py-3 text-sm font-bold text-red-700">削除</button>
                     </div>
@@ -1992,7 +2027,7 @@ export default function App() {
       {tab === "settings" && (
         <Card>
           <SectionTitle icon={<Settings />} title="設定" sub={userEmail} />
-          <button onClick={() => setTab("profile")} className="tap mb-3 w-full rounded-lg bg-genba font-bold text-white">プロフィールを編集</button>
+          <button onClick={() => requestTabChange("profile")} className="tap mb-3 w-full rounded-lg bg-genba font-bold text-white">プロフィールを編集</button>
           <div className="mb-3 grid grid-cols-2 gap-2">
             {[
               ["sites", "現場"],
@@ -2002,7 +2037,7 @@ export default function App() {
               ["documents", "書類一覧"],
               ...(isAdminUser ? [["admin", "管理"]] : [])
             ].map(([next, label]) => (
-              <button key={next} onClick={() => setTab(next as Tab)} className="tap rounded-lg border border-line bg-white px-3 py-3 text-sm font-bold text-genba">{label}</button>
+              <button key={next} onClick={() => requestTabChange(next as Tab)} className="tap rounded-lg border border-line bg-white px-3 py-3 text-sm font-bold text-genba">{label}</button>
             ))}
           </div>
           <button onClick={() => { setUserEmail(""); setUserId(""); setHasRemoteSession(false); supabase?.auth.signOut(); }} className="tap w-full rounded-lg border border-line bg-white font-bold"><LogOut className="mr-2 inline" size={18} />ログアウト</button>
@@ -2014,7 +2049,7 @@ export default function App() {
       <nav className="fixed bottom-0 left-0 right-0 border-t border-line bg-white">
         <div className="mx-auto grid max-w-md grid-cols-5 gap-1 px-2 py-2">
           {nav.slice(0, 5).map(([id, label, icon]) => (
-            <button key={id} onClick={() => setTab(id)} className={`tap rounded-lg text-xs font-bold ${tab === id ? "bg-skysoft text-genba" : "text-slate-500"}`}>
+            <button key={id} onClick={() => requestTabChange(id)} className={`tap rounded-lg text-xs font-bold ${tab === id ? "bg-skysoft text-genba" : "text-slate-500"}`}>
               <span className="mx-auto mb-1 block w-fit">{icon}</span>{label}
             </button>
           ))}

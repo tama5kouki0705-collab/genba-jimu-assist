@@ -72,6 +72,7 @@ export type WorkLog = {
   photoDone: boolean;
   invoiceReady: boolean;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type CalendarSchedule = {
