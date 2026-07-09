@@ -252,6 +252,9 @@ export default function App() {
   const [authReady, setAuthReady] = useState(!hasSupabase);
   const [hasRemoteSession, setHasRemoteSession] = useState(!hasSupabase);
   const [isAuthBusy, setIsAuthBusy] = useState(false);
+  const [isResendBusy, setIsResendBusy] = useState(false);
+  const [signupConfirmationEmail, setSignupConfirmationEmail] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [receiptFilter, setReceiptFilter] = useState<"all" | "unprocessed" | "processed">("all");
   const [editingReceiptId, setEditingReceiptId] = useState("");
@@ -455,6 +458,14 @@ export default function App() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isWorkLogDirty]);
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setInterval(() => {
+      setResendCooldown((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
+
   const homeStats = [
     ["今日の予定", `${todaySchedules.length}件`],
     ["今日の領収書", `${todayReceipts.length}件`],
@@ -544,11 +555,14 @@ export default function App() {
       if (result.data.session?.user) {
         setUserId(result.data.session.user.id);
         setUserEmail(result.data.session.user.email ?? normalizedEmail);
+        setSignupConfirmationEmail("");
         setTab("home");
         setIsAuthBusy(false);
         return;
       }
       if (mode === "signup" && result.data.user) {
+        setSignupConfirmationEmail(normalizedEmail);
+        setResendCooldown(60);
         setMessage("確認メールを送りました。\n①メールを開く\n②メール内の確認ボタンを押す\n③この画面に戻ってログイン\nメールが見つからないときは迷惑メールフォルダも確認してください");
         setIsAuthBusy(false);
         return;
@@ -603,6 +617,30 @@ export default function App() {
     }
     setTab("home");
     setIsAuthBusy(false);
+  }
+
+  async function resendConfirmationEmail() {
+    const targetEmail = signupConfirmationEmail || normalizeEmail(email);
+    if (!targetEmail) {
+      setMessage("先にメールを入れてください");
+      return;
+    }
+    if (!supabase) {
+      setMessage("確認メールの再送は本番DB接続後に使えます");
+      return;
+    }
+    if (resendCooldown > 0) return;
+    setIsResendBusy(true);
+    const result = await supabase.auth.resend({ type: "signup", email: targetEmail });
+    if (result.error) {
+      setMessage(authErrorMessage(result.error.message));
+      setIsResendBusy(false);
+      return;
+    }
+    setSignupConfirmationEmail(targetEmail);
+    setResendCooldown(60);
+    setMessage("確認メールを再送しました。迷惑メールフォルダも確認してください");
+    setIsResendBusy(false);
   }
 
   async function sendPasswordReset() {
@@ -1093,6 +1131,15 @@ export default function App() {
             登録すると <a className="font-bold text-genba underline" href="/terms">利用規約</a> と <a className="font-bold text-genba underline" href="/privacy">プライバシーポリシー</a> に同意したことになります。
           </p>
           {message ? <p className="mt-3 whitespace-pre-line rounded-lg bg-red-50 p-3 text-sm text-red-700">{message}</p> : null}
+          {signupConfirmationEmail ? (
+            <button
+              disabled={isResendBusy || resendCooldown > 0}
+              onClick={resendConfirmationEmail}
+              className="tap mt-3 w-full rounded-lg border border-genba bg-white px-4 py-3 text-sm font-bold text-genba disabled:border-line disabled:text-slate-400"
+            >
+              {isResendBusy ? "再送中..." : resendCooldown > 0 ? `確認メールを再送する（${resendCooldown}秒後）` : "確認メールを再送する"}
+            </button>
+          ) : null}
         </Card>
       </main>
     );
