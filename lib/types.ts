@@ -58,6 +58,7 @@ export type WorkLog = {
   date: string;
   siteId: string;
   siteName: string;
+  trade: string;
   workers: string;
   memo: string;
   weather: string;
@@ -71,6 +72,17 @@ export type WorkLog = {
   receiptDone: boolean;
   photoDone: boolean;
   invoiceReady: boolean;
+  createdAt: string;
+  updatedAt: string;
+  workStartAt: string;
+  workEndAt: string;
+  tradeDetails: Record<string, string | string[] | boolean | number | null> | null;
+};
+
+export type RosterMember = {
+  id: string;
+  name: string;
+  active: boolean;
   createdAt: string;
 };
 
