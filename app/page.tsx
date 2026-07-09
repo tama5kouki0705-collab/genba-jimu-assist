@@ -88,6 +88,7 @@ const BRAND_NAME = "段取　命　君";
 const BRAND_TAGLINE = "職長から始める";
 const BRAND_CHARACTER_SRC = "/dandori-kun.jpg";
 const receiptPurposeOptions = ["材料", "工具・道具", "交通", "駐車場", "高速", "燃料", "消耗品", "外注", "その他"];
+const progressPercentOptions = Array.from({ length: 11 }, (_, index) => index * 10);
 // 請求書・見積書機能。復活手順：この値をtrueに戻すだけ。関連コードは lib/invoice-workflow.ts / lib/pdf-documents.ts / page.tsx の MoneySection。
 const ENABLE_BILLING = false;
 // Googleログイン。Supabase側のOAuth設定確認後、テスト配布で使う場合はtrueに戻す。
@@ -256,6 +257,7 @@ export default function App() {
   const [workLogDate, setWorkLogDate] = useState(today);
   const [workLogWorkersEnabled, setWorkLogWorkersEnabled] = useState(false);
   const [workLogWorkerInputCount, setWorkLogWorkerInputCount] = useState(1);
+  const [workLogProgressInput, setWorkLogProgressInput] = useState("0");
 
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
@@ -409,6 +411,12 @@ export default function App() {
     : todayWorkLog?.workers ? formatWorkerSummary(todayWorkLog.workers) : "自分（1人）";
   const todayHomeMemo = todayMainSchedule?.memo || currentSite?.memo || "";
   const activeWorkSiteName = activeWorkLog?.siteName || activeWorkSchedule?.siteName || activeWorkSite?.siteName || "現場未登録";
+  const activeWorkSiteId = activeWorkLog?.siteId || activeWorkSchedule?.siteId || activeWorkSite?.id || "";
+  const previousWorkProgressLog = activeWorkSiteId ? workLogs
+    .filter((log) => log.siteId === activeWorkSiteId && log.date < workLogDate && log.id !== activeWorkLog?.id)
+    .sort((a, b) => b.date.localeCompare(a.date))[0] : undefined;
+  const previousWorkProgressPercent = previousWorkProgressLog ? clampProgressPercent(previousWorkProgressLog.progressPercent) : null;
+  const workLogInitialProgressPercent = activeWorkLog ? activeWorkProgressPercent : previousWorkProgressPercent ?? 0;
   const activeAdditionalWorkers = extractWorkerNames(activeWorkLog?.workers || activeWorkSchedule?.workers || "");
   const workerNameSuggestions = Array.from(new Set([
     ...workLogs.flatMap((log) => extractWorkerNames(log.workers)),
@@ -421,6 +429,11 @@ export default function App() {
     setWorkLogWorkersEnabled(activeAdditionalWorkers.length > 0);
     setWorkLogWorkerInputCount(Math.max(1, Math.min(10, activeAdditionalWorkers.length || 1)));
   }, [activeWorkerKey, activeAdditionalWorkers.length, tab, workLogDate]);
+
+  useEffect(() => {
+    if (tab !== "todayWork") return;
+    setWorkLogProgressInput(String(workLogInitialProgressPercent));
+  }, [activeWorkLog?.id, tab, workLogDate, workLogInitialProgressPercent]);
 
   const homeStats = [
     ["今日の予定", `${todaySchedules.length}件`],
@@ -1354,7 +1367,38 @@ export default function App() {
               </div>
 
               <TextArea label="本日の作業内容" name="workContent" defaultValue={activeWorkLog?.memo || activeWorkSchedule?.workDescription || ""} placeholder="例：下地調整、配線、器具付けなど" />
-              <Field label="進捗（全体の何%まで終わったか）" name="progressPercent" type="number" defaultValue={activeWorkProgressPercent} />
+              <div className="grid gap-2 rounded-lg border border-line bg-white p-3">
+                <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
+                  進捗（任意・ざっくりでOK）
+                  <input
+                    name="progressPercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={workLogProgressInput}
+                    onChange={(e) => setWorkLogProgressInput(e.currentTarget.value)}
+                    className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+                    placeholder="0〜100"
+                  />
+                </label>
+                {previousWorkProgressPercent !== null && !activeWorkLog ? <p className="text-xs font-bold text-slate-500">前回 {previousWorkProgressPercent}%</p> : null}
+                <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                  {progressPercentOptions.map((percent) => {
+                    const selected = workLogProgressInput !== "" && clampProgressPercent(workLogProgressInput) === percent;
+                    return (
+                      <button
+                        key={percent}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setWorkLogProgressInput(String(percent))}
+                        className={`tap min-h-10 rounded-lg border px-2 py-2 text-sm font-black ${selected ? "border-genba bg-genba text-white" : "border-line bg-skysoft text-genba"}`}
+                      >
+                        {percent}%
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <TextArea label="重機・車両の稼働状況" name="machinery" defaultValue={activeWorkLog?.machinery || ""} placeholder="例：2t車 午前中のみ、ユニック使用なし" />
               <TextArea label="産業廃棄物の搬出記録" name="wasteRecord" defaultValue={activeWorkLog?.wasteRecord || ""} placeholder="例：木くず2袋、金属くず少量" />
               <TextArea label="明日の作業予定・必要な段取り" name="tomorrowPlan" defaultValue={activeWorkLog?.tomorrowPlan || ""} placeholder="例：材料搬入、職人2名、駐車場確認" />
