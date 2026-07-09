@@ -1042,6 +1042,7 @@ export default function App() {
             {hasSupabase && ENABLE_GOOGLE_LOGIN ? <button disabled={isAuthBusy} onClick={() => signIn("google")} className="tap rounded-lg border border-line bg-white px-4 py-3 font-bold disabled:opacity-60">Googleでログイン</button> : null}
             {hasSupabase ? <button disabled={isAuthBusy} onClick={sendPasswordReset} className="tap rounded-lg border border-line bg-white px-4 py-3 text-sm font-bold text-slate-700 disabled:opacity-60">パスワードを忘れた</button> : null}
             <button disabled={isAuthBusy} onClick={() => signIn("demo")} className="tap rounded-lg bg-skysoft px-4 py-3 font-bold text-genba disabled:opacity-60">お試し画面を見る</button>
+            <p className="text-xs leading-5 text-slate-500">お試し画面のデータは、この端末だけに保存されます。会社への同期はされません。</p>
           </div>
           {!hasSupabase ? <p className="mt-3 text-xs leading-5 text-slate-500">公開版はすぐ使える端末保存モードです。登録したメールごとにデータを分けて保存します。</p> : null}
           <p className="mt-3 text-center text-xs leading-5 text-slate-500">

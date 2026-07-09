@@ -33,7 +33,7 @@ export default function PrintPage() {
         <div className="mx-auto max-w-md p-5">
           <section className="rounded-lg border border-line bg-white p-4 shadow-soft">
             <h1 className="text-xl font-bold">帳票データがありません</h1>
-            <p className="mt-2 text-sm text-slate-600">請求書、見積書、各種一覧の画面から、もう一度PDFボタンを押してください。</p>
+            <p className="mt-2 text-sm text-slate-600">領収書一覧など、PDFボタンのある画面から、もう一度開き直してください。</p>
           </section>
         </div>
       )}
