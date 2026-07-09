@@ -1399,8 +1399,13 @@ export default function App() {
                   })}
                 </div>
               </div>
-              <TextArea label="重機・車両の稼働状況" name="machinery" defaultValue={activeWorkLog?.machinery || ""} placeholder="例：2t車 午前中のみ、ユニック使用なし" />
-              <TextArea label="産業廃棄物の搬出記録" name="wasteRecord" defaultValue={activeWorkLog?.wasteRecord || ""} placeholder="例：木くず2袋、金属くず少量" />
+              <details open={Boolean(activeWorkLog?.machinery || activeWorkLog?.wasteRecord)} className="rounded-lg border border-line bg-white p-3">
+                <summary className="cursor-pointer text-sm font-black text-genba">重機・産廃の記録（使う人だけ開く）</summary>
+                <div className="mt-3 grid gap-3">
+                  <TextArea label="重機・車両の稼働状況" name="machinery" defaultValue={activeWorkLog?.machinery || ""} placeholder="例：2t車 午前中のみ、ユニック使用なし" />
+                  <TextArea label="産業廃棄物の搬出記録" name="wasteRecord" defaultValue={activeWorkLog?.wasteRecord || ""} placeholder="例：木くず2袋、金属くず少量" />
+                </div>
+              </details>
               <TextArea label="明日の作業予定・必要な段取り" name="tomorrowPlan" defaultValue={activeWorkLog?.tomorrowPlan || ""} placeholder="例：材料搬入、職人2名、駐車場確認" />
               <TextArea label="特記事項・連絡事項" name="notes" defaultValue={activeWorkLog?.notes || ""} placeholder="例：施主確認待ち、近隣対応あり" />
               <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
