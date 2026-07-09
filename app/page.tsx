@@ -50,6 +50,7 @@ import { INVOICE_LINE_ITEM_CATEGORIES, INVOICE_LINE_ITEM_UNITS, MAX_INVOICE_LINE
 import { STORAGE_ERROR_EVENT, STORAGE_LIMIT_MESSAGE, accountKey, getLocalAccounts, hashPassword, normalizeEmail, saveLocalAccounts, setLocalStorageItem, useStoredState } from "@/lib/local-state";
 import { buildPrintableDocumentHtml } from "@/lib/pdf-documents";
 import { receiptStatusLabel } from "@/lib/receipt-domain";
+import { compactTradeDetails, getTradeReportConfig, type TradeDetails, type TradeReportField } from "@/lib/trade-report-fields";
 import type { AdminUser, CalendarSchedule, Estimate, Invoice, InvoiceLineItem, Plan, Profile, Qualification, Receipt, Site, Vehicle, WorkLog } from "@/lib/types";
 
 type Tab =
@@ -233,6 +234,124 @@ function SectionTitle({ icon, title, sub }: { icon: React.ReactNode; title: stri
   );
 }
 
+function TradeReportFields({
+  title,
+  note,
+  fields,
+  details,
+  onChange
+}: {
+  title: string;
+  note?: string;
+  fields: TradeReportField[];
+  details: TradeDetails;
+  onChange: (fieldId: string, value: string | string[] | boolean | number | null) => void;
+}) {
+  const buttonClass = (selected: boolean) => `tap min-h-11 rounded-lg border px-3 py-2 text-sm font-black ${selected ? "border-genba bg-genba text-white" : "border-line bg-skysoft text-genba"}`;
+
+  return (
+    <details open className="rounded-lg border border-genba/30 bg-white p-3">
+      <summary className="cursor-pointer text-sm font-black text-genba">{title}</summary>
+      <div className="mt-3 grid gap-3">
+        {fields.map((field) => {
+          const value = details[field.id];
+          if (field.type === "check") {
+            const selectedValues = Array.isArray(value) ? value : [];
+            return (
+              <div key={field.id} className="grid gap-2">
+                <p className="text-sm font-bold text-ink">{field.label}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(field.options ?? []).map((option) => {
+                    const selected = selectedValues.includes(option);
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => onChange(field.id, selected ? selectedValues.filter((item) => item !== option) : [...selectedValues, option])}
+                        className={buttonClass(selected)}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          }
+          if (field.type === "select") {
+            return (
+              <div key={field.id} className="grid gap-2">
+                <p className="text-sm font-bold text-ink">{field.label}</p>
+                <div className="grid grid-cols-1 gap-2">
+                  {(field.options ?? []).map((option) => {
+                    const selected = value === option;
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => onChange(field.id, selected ? "" : option)}
+                        className={buttonClass(selected)}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          }
+          if (field.type === "number") {
+            return (
+              <label key={field.id} className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
+                {field.label}
+                <input
+                  type="number"
+                  value={typeof value === "number" || typeof value === "string" ? value : ""}
+                  onChange={(event) => onChange(field.id, event.currentTarget.value)}
+                  placeholder={field.placeholder}
+                  className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+                />
+              </label>
+            );
+          }
+          if (field.type === "toggle-text") {
+            const enabled = value === true || (typeof value === "string" && value.length > 0);
+            return (
+              <div key={field.id} className="grid gap-2">
+                <button type="button" aria-pressed={enabled} onClick={() => onChange(field.id, enabled ? null : true)} className={buttonClass(enabled)}>
+                  {field.label}
+                </button>
+                {enabled ? (
+                  <input
+                    value={typeof value === "string" ? value : ""}
+                    onChange={(event) => onChange(field.id, event.currentTarget.value || true)}
+                    placeholder={field.placeholder}
+                    className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+                  />
+                ) : null}
+              </div>
+            );
+          }
+          return (
+            <label key={field.id} className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
+              {field.label}
+              <input
+                value={typeof value === "string" ? value : ""}
+                onChange={(event) => onChange(field.id, event.currentTarget.value)}
+                placeholder={field.placeholder}
+                className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+              />
+            </label>
+          );
+        })}
+        {note ? <p className="rounded-lg bg-skysoft p-3 text-xs font-bold leading-5 text-genba">{note}</p> : null}
+      </div>
+    </details>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("home");
   const [email, setEmail] = useState("");
@@ -273,6 +392,7 @@ export default function App() {
   const [workLogWorkerInputCount, setWorkLogWorkerInputCount] = useState(1);
   const [workLogProgressInput, setWorkLogProgressInput] = useState("0");
   const [isWorkLogDirty, setIsWorkLogDirty] = useState(false);
+  const [workLogTradeDetails, setWorkLogTradeDetails] = useState<TradeDetails>({});
 
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
@@ -428,6 +548,8 @@ export default function App() {
   const todayHomeMemo = todayMainSchedule?.memo || currentSite?.memo || "";
   const activeWorkSiteName = activeWorkLog?.siteName || activeWorkSchedule?.siteName || activeWorkSite?.siteName || "現場未登録";
   const activeWorkSiteId = activeWorkLog?.siteId || activeWorkSchedule?.siteId || activeWorkSite?.id || "";
+  const activeTradeConfig = getTradeReportConfig(profile.trade || "");
+  const shouldShowCommonMachineryWaste = activeTradeConfig?.trade !== "解体" || Boolean(activeWorkLog?.machinery || activeWorkLog?.wasteRecord);
   const previousWorkProgressLog = activeWorkSiteId ? workLogs
     .filter((log) => log.siteId === activeWorkSiteId && log.date < workLogDate && log.id !== activeWorkLog?.id)
     .sort((a, b) => b.date.localeCompare(a.date))[0] : undefined;
@@ -449,8 +571,9 @@ export default function App() {
   useEffect(() => {
     if (tab !== "todayWork") return;
     setWorkLogProgressInput(String(workLogInitialProgressPercent));
+    setWorkLogTradeDetails(activeWorkLog?.tradeDetails ?? {});
     setIsWorkLogDirty(false);
-  }, [activeWorkLog?.id, tab, workLogDate, workLogInitialProgressPercent]);
+  }, [activeTradeConfig?.trade, activeWorkLog?.id, activeWorkLog?.tradeDetails, tab, workLogDate, workLogInitialProgressPercent]);
 
   useEffect(() => {
     if (!isWorkLogDirty) return;
@@ -482,6 +605,11 @@ export default function App() {
       return;
     }
     setTab(nextTab);
+  }
+
+  function updateWorkLogTradeDetail(fieldId: string, value: string | string[] | boolean | number | null) {
+    setWorkLogTradeDetails((details) => ({ ...details, [fieldId]: value }));
+    setIsWorkLogDirty(true);
   }
 
   // TODO: 将来 Supabase pg_cron + Edge Function + Web Push で7:00/開始1時間前/15:00/17:00を実配信する。今回はアプリ内通知だけ。
@@ -963,7 +1091,7 @@ export default function App() {
       invoiceReady: ENABLE_BILLING ? fd.get("invoiceReady") === "on" : existing?.invoiceReady ?? false,
       createdAt: existing?.createdAt ?? updatedAt,
       updatedAt,
-      tradeDetails: existing?.tradeDetails ?? null
+      tradeDetails: activeTradeConfig ? compactTradeDetails(activeTradeConfig, workLogTradeDetails) : existing?.tradeDetails ?? null
     };
     setWorkLogs([workLog, ...workLogs.filter((log) => log.id !== workLog.id)]);
     await saveRemote((id) => saveWorkLogRemote(workLog, id));
@@ -1488,13 +1616,29 @@ export default function App() {
                   })}
                 </div>
               </div>
-              <details open={Boolean(activeWorkLog?.machinery || activeWorkLog?.wasteRecord)} className="rounded-lg border border-line bg-white p-3">
-                <summary className="cursor-pointer text-sm font-black text-genba">重機・産廃の記録（使う人だけ開く）</summary>
-                <div className="mt-3 grid gap-3">
-                  <TextArea label="重機・車両の稼働状況" name="machinery" defaultValue={activeWorkLog?.machinery || ""} placeholder="例：2t車 午前中のみ、ユニック使用なし" />
-                  <TextArea label="産業廃棄物の搬出記録" name="wasteRecord" defaultValue={activeWorkLog?.wasteRecord || ""} placeholder="例：木くず2袋、金属くず少量" />
-                </div>
-              </details>
+              {shouldShowCommonMachineryWaste ? (
+                <details open={Boolean(activeWorkLog?.machinery || activeWorkLog?.wasteRecord)} className="rounded-lg border border-line bg-white p-3">
+                  <summary className="cursor-pointer text-sm font-black text-genba">重機・産廃の記録（使う人だけ開く）</summary>
+                  <div className="mt-3 grid gap-3">
+                    <TextArea label="重機・車両の稼働状況" name="machinery" defaultValue={activeWorkLog?.machinery || ""} placeholder="例：2t車 午前中のみ、ユニック使用なし" />
+                    <TextArea label="産業廃棄物の搬出記録" name="wasteRecord" defaultValue={activeWorkLog?.wasteRecord || ""} placeholder="例：木くず2袋、金属くず少量" />
+                  </div>
+                </details>
+              ) : (
+                <>
+                  <input type="hidden" name="machinery" value={activeWorkLog?.machinery || ""} readOnly />
+                  <input type="hidden" name="wasteRecord" value={activeWorkLog?.wasteRecord || ""} readOnly />
+                </>
+              )}
+              {activeTradeConfig ? (
+                <TradeReportFields
+                  title={activeTradeConfig.title}
+                  note={activeTradeConfig.note}
+                  fields={activeTradeConfig.fields}
+                  details={workLogTradeDetails}
+                  onChange={updateWorkLogTradeDetail}
+                />
+              ) : null}
               <TextArea label="明日の作業予定・必要な段取り" name="tomorrowPlan" defaultValue={activeWorkLog?.tomorrowPlan || ""} placeholder="例：材料搬入、職人2名、駐車場確認" />
               <TextArea label="特記事項・連絡事項" name="notes" defaultValue={activeWorkLog?.notes || ""} placeholder="例：施主確認待ち、近隣対応あり" />
               <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
