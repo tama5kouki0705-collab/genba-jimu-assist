@@ -73,6 +73,7 @@ export type WorkLog = {
   invoiceReady: boolean;
   createdAt: string;
   updatedAt: string;
+  tradeDetails: Record<string, string | string[] | boolean | number | null> | null;
 };
 
 export type CalendarSchedule = {

@@ -962,7 +962,8 @@ export default function App() {
       photoDone: Boolean(existing?.photoDone || existing?.photoUrls.length || newPhotos.length),
       invoiceReady: ENABLE_BILLING ? fd.get("invoiceReady") === "on" : existing?.invoiceReady ?? false,
       createdAt: existing?.createdAt ?? updatedAt,
-      updatedAt
+      updatedAt,
+      tradeDetails: existing?.tradeDetails ?? null
     };
     setWorkLogs([workLog, ...workLogs.filter((log) => log.id !== workLog.id)]);
     await saveRemote((id) => saveWorkLogRemote(workLog, id));
