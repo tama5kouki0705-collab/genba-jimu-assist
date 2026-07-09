@@ -131,69 +131,10 @@ function num(value: FormDataEntryValue | null) {
 
 const receiptDisplayName = (receipt: Receipt) => receipt.purpose || receipt.storeName || "名目未入力";
 
-type WorkLogDetails = {
-  weather: string;
-  progressPercent: number;
-  workContent: string;
-  equipment: string;
-  waste: string;
-  tomorrowPlan: string;
-  notes: string;
-};
-
-const defaultWorkLogDetails: WorkLogDetails = {
-  weather: "☀️",
-  progressPercent: 0,
-  workContent: "",
-  equipment: "",
-  waste: "",
-  tomorrowPlan: "",
-  notes: ""
-};
-
 function clampProgressPercent(value: FormDataEntryValue | string | number | null | undefined) {
   const parsed = Number(String(value ?? "").replace("%", ""));
   if (!Number.isFinite(parsed)) return 0;
   return Math.max(0, Math.min(100, Math.round(parsed)));
-}
-
-function parseWorkLogMemo(memo: string): WorkLogDetails {
-  const text = memo.trim();
-  if (!text) return { ...defaultWorkLogDetails };
-  if (!text.includes("【")) return { ...defaultWorkLogDetails, workContent: text };
-
-  const sections = new Map<string, string>();
-  const matcher = /【([^】]+)】\s*\n([\s\S]*?)(?=\n\s*【[^】]+】|$)/g;
-  let match: RegExpExecArray | null;
-  while ((match = matcher.exec(text))) {
-    sections.set(match[1].trim(), match[2].trim());
-  }
-
-  return {
-    weather: sections.get("天候") || defaultWorkLogDetails.weather,
-    progressPercent: clampProgressPercent(sections.get("進捗")),
-    workContent: sections.get("本日の作業内容") || "",
-    equipment: sections.get("重機・車両の稼働状況") || "",
-    waste: sections.get("産業廃棄物の搬出記録") || "",
-    tomorrowPlan: sections.get("明日の作業予定・必要な段取り") || "",
-    notes: sections.get("特記事項・連絡事項") || ""
-  };
-}
-
-function composeWorkLogMemo(details: WorkLogDetails) {
-  const rows: Array<[string, string]> = [
-    ["天候", details.weather],
-    ["進捗", `${clampProgressPercent(details.progressPercent)}%`],
-    ["本日の作業内容", details.workContent],
-    ["重機・車両の稼働状況", details.equipment],
-    ["産業廃棄物の搬出記録", details.waste],
-    ["明日の作業予定・必要な段取り", details.tomorrowPlan],
-    ["特記事項・連絡事項", details.notes]
-  ];
-  return rows
-    .filter(([, value]) => String(value).trim())
-    .map(([label, value]) => `【${label}】\n${value}`)
-    .join("\n\n");
 }
 
 function extractWorkerNames(workers: string) {
@@ -404,8 +345,7 @@ export default function App() {
   const hasSites = sites.length > 0;
   const editingSite = sites.find((site) => site.id === editingSiteId);
   const todayWorkLog = workLogs.find((log) => log.date === today);
-  const todayWorkDetails = parseWorkLogMemo(todayWorkLog?.memo || "");
-  const todayWorkProgressPercent = todayWorkLog ? todayWorkDetails.progressPercent : 0;
+  const todayWorkProgressPercent = todayWorkLog ? clampProgressPercent(todayWorkLog.progressPercent) : 0;
   const monthSales = ENABLE_BILLING ? invoices.filter((invoice) => invoice.status === "入金済み" && isCurrentMonth(invoice.issueDate ?? "")).reduce((sum, invoice) => sum + invoice.totalAmount, 0) : 0;
   const unprocessedReceipts = receipts.filter((r) => r.status === "未処理");
   const monthExpense = receipts.filter((receipt) => isCurrentMonth(receipt.date)).reduce((sum, receipt) => sum + receipt.amount, 0);
@@ -444,7 +384,8 @@ export default function App() {
   const selectedDateSchedules = calendarSchedules.filter((item) => item.date === selectedCalendarDate);
   const todayMainSchedule = todaySchedules[0];
   const activeWorkLog = workLogs.find((log) => log.date === workLogDate);
-  const activeWorkDetails = parseWorkLogMemo(activeWorkLog?.memo || "");
+  const activeWorkProgressPercent = activeWorkLog ? clampProgressPercent(activeWorkLog.progressPercent) : 0;
+  const activeWorkWeather = activeWorkLog?.weather || "☀️";
   const activeWorkSchedule = calendarSchedules.find((item) => item.date === workLogDate && (!activeWorkLog?.siteId || item.siteId === activeWorkLog.siteId));
   const activeWorkSite = (activeWorkLog?.siteId ? sites.find((site) => site.id === activeWorkLog.siteId) : undefined)
     || (activeWorkSchedule?.siteId ? sites.find((site) => site.id === activeWorkSchedule.siteId) : undefined)
@@ -459,7 +400,7 @@ export default function App() {
   const isAdminUser = adminUsers.some((user) => normalizeEmail(user.email) === normalizeEmail(userEmail) && user.role === "admin" && user.status === "active");
   const todaySiteAddress = todayScheduleSite?.address || currentSite?.address || "";
   const todayPhotoMemo = todayWorkLog?.photoUrls.length ? `写真 ${todayWorkLog.photoUrls.length}枚を保存済み` : "写真メモはまだありません";
-  const todayWorkDraft = todayWorkDetails.workContent || todayMainSchedule?.workDescription || "日報下書きはまだありません";
+  const todayWorkDraft = todayWorkLog?.memo || todayMainSchedule?.workDescription || "日報下書きはまだありません";
   const todayProgressLabel = todayWorkLog ? `${todayWorkProgressPercent}%` : "0%";
   const todayPeopleLabel = todayMainSchedule?.workers
     ? formatWorkerSummary(todayMainSchedule.workers, todayMainSchedule.laborCount)
@@ -902,15 +843,6 @@ export default function App() {
     const additionalWorkers = hasAdditionalWorkers
       ? fd.getAll("workerName").map((name) => String(name).trim()).filter(Boolean).filter((name) => name !== "自分").slice(0, 10)
       : [];
-    const details: WorkLogDetails = {
-      weather: String(fd.get("weather") || defaultWorkLogDetails.weather),
-      progressPercent: clampProgressPercent(fd.get("progressPercent")),
-      workContent: String(fd.get("workContent") || schedule?.workDescription || "").trim(),
-      equipment: String(fd.get("equipment") || "").trim(),
-      waste: String(fd.get("waste") || "").trim(),
-      tomorrowPlan: String(fd.get("tomorrowPlan") || "").trim(),
-      notes: String(fd.get("notes") || "").trim()
-    };
     const photoInput = form.elements.namedItem("photos") as HTMLInputElement | null;
     let newPhotos: string[] = [];
     try {
@@ -926,7 +858,14 @@ export default function App() {
       siteId,
       siteName: site?.siteName || schedule?.siteName || String(fd.get("siteName") || activeWorkSiteName || ""),
       workers: ["自分", ...Array.from(new Set(additionalWorkers))].join("、"),
-      memo: composeWorkLogMemo(details),
+      memo: String(fd.get("workContent") || schedule?.workDescription || "").trim(),
+      weather: String(fd.get("weather") || "☀️"),
+      progressPercent: clampProgressPercent(fd.get("progressPercent")),
+      foreman: "自分",
+      machinery: String(fd.get("machinery") || "").trim(),
+      wasteRecord: String(fd.get("wasteRecord") || "").trim(),
+      tomorrowPlan: String(fd.get("tomorrowPlan") || "").trim(),
+      notes: String(fd.get("notes") || "").trim(),
       photoUrls: [...(existing?.photoUrls ?? []), ...newPhotos].slice(0, 12),
       receiptDone: existing?.receiptDone ?? receipts.some((receipt) => receipt.date === date),
       photoDone: Boolean(existing?.photoDone || existing?.photoUrls.length || newPhotos.length),
@@ -1319,7 +1258,7 @@ export default function App() {
           <Card className="bg-genba text-white">
             <p className="text-sm opacity-90">日報記入</p>
             <h2 className="mt-1 text-2xl font-black">{workLogDate}</h2>
-            <p className="mt-2 text-sm opacity-90">{activeWorkLog ? `進捗 ${activeWorkDetails.progressPercent}% まで記録済み` : activeWorkSchedule ? "カレンダー予定と現場管理から日報を書けます" : "現場管理の内容をもとに手入力できます"}</p>
+            <p className="mt-2 text-sm opacity-90">{activeWorkLog ? `進捗 ${activeWorkProgressPercent}% まで記録済み` : activeWorkSchedule ? "カレンダー予定と現場管理から日報を書けます" : "現場管理の内容をもとに手入力できます"}</p>
           </Card>
 
           <Card>
@@ -1339,7 +1278,7 @@ export default function App() {
                   </div>
                   <label className="grid min-w-0 gap-1 rounded-lg bg-white p-3 text-xs font-bold text-slate-500">
                     天候
-                    <select name="weather" defaultValue={activeWorkDetails.weather} className="tap min-h-10 min-w-0 w-full rounded-lg border border-line bg-white px-3 py-2 text-base font-black text-ink outline-none focus:border-genba focus:ring-4 focus:ring-skysoft">
+                    <select name="weather" defaultValue={activeWorkWeather} className="tap min-h-10 min-w-0 w-full rounded-lg border border-line bg-white px-3 py-2 text-base font-black text-ink outline-none focus:border-genba focus:ring-4 focus:ring-skysoft">
                       <option value="☀️">☀️ 晴れ</option>
                       <option value="☁️">☁️ くもり</option>
                       <option value="☔️">☔️ 雨</option>
@@ -1406,12 +1345,12 @@ export default function App() {
                 ) : null}
               </div>
 
-              <TextArea label="本日の作業内容" name="workContent" defaultValue={activeWorkDetails.workContent || activeWorkSchedule?.workDescription || ""} placeholder="例：下地調整、配線、器具付けなど" />
-              <Field label="進捗（全体の何%まで終わったか）" name="progressPercent" type="number" defaultValue={activeWorkDetails.progressPercent} />
-              <TextArea label="重機・車両の稼働状況" name="equipment" defaultValue={activeWorkDetails.equipment} placeholder="例：2t車 午前中のみ、ユニック使用なし" />
-              <TextArea label="産業廃棄物の搬出記録" name="waste" defaultValue={activeWorkDetails.waste} placeholder="例：木くず2袋、金属くず少量" />
-              <TextArea label="明日の作業予定・必要な段取り" name="tomorrowPlan" defaultValue={activeWorkDetails.tomorrowPlan} placeholder="例：材料搬入、職人2名、駐車場確認" />
-              <TextArea label="特記事項・連絡事項" name="notes" defaultValue={activeWorkDetails.notes} placeholder="例：施主確認待ち、近隣対応あり" />
+              <TextArea label="本日の作業内容" name="workContent" defaultValue={activeWorkLog?.memo || activeWorkSchedule?.workDescription || ""} placeholder="例：下地調整、配線、器具付けなど" />
+              <Field label="進捗（全体の何%まで終わったか）" name="progressPercent" type="number" defaultValue={activeWorkProgressPercent} />
+              <TextArea label="重機・車両の稼働状況" name="machinery" defaultValue={activeWorkLog?.machinery || ""} placeholder="例：2t車 午前中のみ、ユニック使用なし" />
+              <TextArea label="産業廃棄物の搬出記録" name="wasteRecord" defaultValue={activeWorkLog?.wasteRecord || ""} placeholder="例：木くず2袋、金属くず少量" />
+              <TextArea label="明日の作業予定・必要な段取り" name="tomorrowPlan" defaultValue={activeWorkLog?.tomorrowPlan || ""} placeholder="例：材料搬入、職人2名、駐車場確認" />
+              <TextArea label="特記事項・連絡事項" name="notes" defaultValue={activeWorkLog?.notes || ""} placeholder="例：施主確認待ち、近隣対応あり" />
               <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
                 現場写真
                 <input name="photos" type="file" accept="image/*" multiple className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base" />
@@ -1429,22 +1368,22 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-2">
                   <div className="rounded-lg bg-white p-3">
                     <p className="text-xs font-bold text-slate-500">天候</p>
-                    <p className="mt-1 text-base font-black text-ink">{activeWorkDetails.weather}</p>
+                    <p className="mt-1 text-base font-black text-ink">{activeWorkWeather}</p>
                   </div>
                   <div className="rounded-lg bg-white p-3">
                     <p className="text-xs font-bold text-slate-500">進捗</p>
-                    <p className="mt-1 text-base font-black text-genba">{activeWorkDetails.progressPercent}%</p>
+                    <p className="mt-1 text-base font-black text-genba">{activeWorkProgressPercent}%</p>
                     <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-genba" style={{ width: `${activeWorkDetails.progressPercent}%` }} />
+                      <div className="h-full rounded-full bg-genba" style={{ width: `${activeWorkProgressPercent}%` }} />
                     </div>
                   </div>
                 </div>
                 {[
-                  ["本日の作業内容", activeWorkDetails.workContent],
-                  ["重機・車両の稼働状況", activeWorkDetails.equipment],
-                  ["産業廃棄物の搬出記録", activeWorkDetails.waste],
-                  ["明日の作業予定・必要な段取り", activeWorkDetails.tomorrowPlan],
-                  ["特記事項・連絡事項", activeWorkDetails.notes]
+                  ["本日の作業内容", activeWorkLog.memo],
+                  ["重機・車両の稼働状況", activeWorkLog.machinery || ""],
+                  ["産業廃棄物の搬出記録", activeWorkLog.wasteRecord || ""],
+                  ["明日の作業予定・必要な段取り", activeWorkLog.tomorrowPlan || ""],
+                  ["特記事項・連絡事項", activeWorkLog.notes || ""]
                 ].filter(([, value]) => value).map(([label, value]) => (
                   <div key={label} className="rounded-lg bg-white p-3">
                     <p className="text-xs font-bold text-slate-500">{label}</p>
