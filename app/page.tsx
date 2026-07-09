@@ -131,6 +131,88 @@ function num(value: FormDataEntryValue | null) {
 
 const receiptDisplayName = (receipt: Receipt) => receipt.purpose || receipt.storeName || "名目未入力";
 
+type WorkLogDetails = {
+  weather: string;
+  progressPercent: number;
+  workContent: string;
+  equipment: string;
+  waste: string;
+  tomorrowPlan: string;
+  notes: string;
+};
+
+const defaultWorkLogDetails: WorkLogDetails = {
+  weather: "☀️",
+  progressPercent: 0,
+  workContent: "",
+  equipment: "",
+  waste: "",
+  tomorrowPlan: "",
+  notes: ""
+};
+
+function clampProgressPercent(value: FormDataEntryValue | string | number | null | undefined) {
+  const parsed = Number(String(value ?? "").replace("%", ""));
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(100, Math.round(parsed)));
+}
+
+function parseWorkLogMemo(memo: string): WorkLogDetails {
+  const text = memo.trim();
+  if (!text) return { ...defaultWorkLogDetails };
+  if (!text.includes("【")) return { ...defaultWorkLogDetails, workContent: text };
+
+  const sections = new Map<string, string>();
+  const matcher = /【([^】]+)】\s*\n([\s\S]*?)(?=\n\s*【[^】]+】|$)/g;
+  let match: RegExpExecArray | null;
+  while ((match = matcher.exec(text))) {
+    sections.set(match[1].trim(), match[2].trim());
+  }
+
+  return {
+    weather: sections.get("天候") || defaultWorkLogDetails.weather,
+    progressPercent: clampProgressPercent(sections.get("進捗")),
+    workContent: sections.get("本日の作業内容") || "",
+    equipment: sections.get("重機・車両の稼働状況") || "",
+    waste: sections.get("産業廃棄物の搬出記録") || "",
+    tomorrowPlan: sections.get("明日の作業予定・必要な段取り") || "",
+    notes: sections.get("特記事項・連絡事項") || ""
+  };
+}
+
+function composeWorkLogMemo(details: WorkLogDetails) {
+  const rows: Array<[string, string]> = [
+    ["天候", details.weather],
+    ["進捗", `${clampProgressPercent(details.progressPercent)}%`],
+    ["本日の作業内容", details.workContent],
+    ["重機・車両の稼働状況", details.equipment],
+    ["産業廃棄物の搬出記録", details.waste],
+    ["明日の作業予定・必要な段取り", details.tomorrowPlan],
+    ["特記事項・連絡事項", details.notes]
+  ];
+  return rows
+    .filter(([, value]) => String(value).trim())
+    .map(([label, value]) => `【${label}】\n${value}`)
+    .join("\n\n");
+}
+
+function extractWorkerNames(workers: string) {
+  const names = workers
+    .replace(/作業責任者[:：]/g, "")
+    .replace(/作業員[:：]/g, "")
+    .split(/[、,\n]/)
+    .map((name) => name.replace(/（.*?人工）/g, "").trim())
+    .filter((name) => name && name !== "自分");
+  return Array.from(new Set(names)).slice(0, 10);
+}
+
+function formatWorkerSummary(workers: string, laborCount?: number) {
+  const extraWorkers = extractWorkerNames(workers);
+  const names = ["自分", ...extraWorkers];
+  const countLabel = laborCount && laborCount > 0 ? `${laborCount}人工` : `${names.length}人`;
+  return `${names.join("、")}（${countLabel}）`;
+}
+
 function authErrorMessage(message: string) {
   const lower = message.toLowerCase();
   if (lower.includes("invalid login credentials")) return "メールまたはパスワードが違います";
@@ -229,6 +311,8 @@ export default function App() {
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(today);
   const [calendarAddFocus, setCalendarAddFocus] = useState(false);
   const [workLogDate, setWorkLogDate] = useState(today);
+  const [workLogWorkersEnabled, setWorkLogWorkersEnabled] = useState(false);
+  const [workLogWorkerInputCount, setWorkLogWorkerInputCount] = useState(1);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
@@ -320,9 +404,8 @@ export default function App() {
   const hasSites = sites.length > 0;
   const editingSite = sites.find((site) => site.id === editingSiteId);
   const todayWorkLog = workLogs.find((log) => log.date === today);
-  const todayWorkProgressItems = [todayWorkLog?.memo, todayWorkLog?.receiptDone, todayWorkLog?.photoDone, ...(ENABLE_BILLING ? [todayWorkLog?.invoiceReady] : [])];
-  const todayWorkProgress = todayWorkProgressItems.filter(Boolean).length;
-  const todayWorkProgressTotal = todayWorkProgressItems.length;
+  const todayWorkDetails = parseWorkLogMemo(todayWorkLog?.memo || "");
+  const todayWorkProgressPercent = todayWorkLog ? todayWorkDetails.progressPercent : 0;
   const monthSales = ENABLE_BILLING ? invoices.filter((invoice) => invoice.status === "入金済み" && isCurrentMonth(invoice.issueDate ?? "")).reduce((sum, invoice) => sum + invoice.totalAmount, 0) : 0;
   const unprocessedReceipts = receipts.filter((r) => r.status === "未処理");
   const monthExpense = receipts.filter((receipt) => isCurrentMonth(receipt.date)).reduce((sum, receipt) => sum + receipt.amount, 0);
@@ -361,10 +444,11 @@ export default function App() {
   const selectedDateSchedules = calendarSchedules.filter((item) => item.date === selectedCalendarDate);
   const todayMainSchedule = todaySchedules[0];
   const activeWorkLog = workLogs.find((log) => log.date === workLogDate);
-  const activeWorkProgress = [activeWorkLog?.memo, activeWorkLog?.receiptDone, activeWorkLog?.photoDone, ...(ENABLE_BILLING ? [activeWorkLog?.invoiceReady] : [])].filter(Boolean).length;
-  const activeWorkProgressTotal = ENABLE_BILLING ? 4 : 3;
-  const activeWorkSchedule = calendarSchedules.find((item) => item.date === workLogDate);
-  const activeWorkSite = activeWorkSchedule ? sites.find((site) => site.id === activeWorkSchedule.siteId) : undefined;
+  const activeWorkDetails = parseWorkLogMemo(activeWorkLog?.memo || "");
+  const activeWorkSchedule = calendarSchedules.find((item) => item.date === workLogDate && (!activeWorkLog?.siteId || item.siteId === activeWorkLog.siteId));
+  const activeWorkSite = (activeWorkLog?.siteId ? sites.find((site) => site.id === activeWorkLog.siteId) : undefined)
+    || (activeWorkSchedule?.siteId ? sites.find((site) => site.id === activeWorkSchedule.siteId) : undefined)
+    || currentSite;
   const activeWorkTimes = autoWorkTimes(activeWorkSchedule?.startTime || "", activeWorkSchedule?.endTime || "");
   const todayScheduleSite = todayMainSchedule ? sites.find((site) => site.id === todayMainSchedule.siteId) : undefined;
   const todayReceipts = receipts.filter((receipt) => receipt.date === today);
@@ -372,16 +456,29 @@ export default function App() {
   const workerLabel = profile.contactName || profile.name || "担当者未登録";
   const companyLabel = profile.companyName || "所属未登録";
   const mainSiteLabel = todayMainSchedule?.siteName || todaySiteItems[0]?.title || currentSite?.siteName || "現場未登録";
-  const mainSiteSub = todayMainSchedule?.workDescription || todaySiteItems[0]?.sub || currentSite?.address || "カレンダーに予定を入れると今日の流れに出ます";
   const isAdminUser = adminUsers.some((user) => normalizeEmail(user.email) === normalizeEmail(userEmail) && user.role === "admin" && user.status === "active");
   const todaySiteAddress = todayScheduleSite?.address || currentSite?.address || "";
   const todayPhotoMemo = todayWorkLog?.photoUrls.length ? `写真 ${todayWorkLog.photoUrls.length}枚を保存済み` : "写真メモはまだありません";
-  const todayWorkDraft = todayWorkLog?.memo || todayMainSchedule?.workDescription || "日報下書きはまだありません";
-  const todayProgressLabel = todayWorkLog ? `${todayWorkProgress}/${todayWorkProgressTotal} 完了` : "日報はまだです";
+  const todayWorkDraft = todayWorkDetails.workContent || todayMainSchedule?.workDescription || "日報下書きはまだありません";
+  const todayProgressLabel = todayWorkLog ? `${todayWorkProgressPercent}%` : "0%";
   const todayPeopleLabel = todayMainSchedule?.workers
-    ? `${todayMainSchedule.workers}${todayMainSchedule.laborCount ? `（${todayMainSchedule.laborCount}人工）` : ""}`
-    : todayWorkLog?.workers || "未入力";
+    ? formatWorkerSummary(todayMainSchedule.workers, todayMainSchedule.laborCount)
+    : todayWorkLog?.workers ? formatWorkerSummary(todayWorkLog.workers) : "自分（1人）";
   const todayHomeMemo = todayMainSchedule?.memo || currentSite?.memo || "";
+  const activeWorkSiteName = activeWorkLog?.siteName || activeWorkSchedule?.siteName || activeWorkSite?.siteName || "現場未登録";
+  const activeAdditionalWorkers = extractWorkerNames(activeWorkLog?.workers || activeWorkSchedule?.workers || "");
+  const workerNameSuggestions = Array.from(new Set([
+    ...workLogs.flatMap((log) => extractWorkerNames(log.workers)),
+    ...calendarSchedules.flatMap((schedule) => extractWorkerNames(schedule.workers))
+  ])).slice(0, 5);
+  const activeWorkerKey = activeAdditionalWorkers.join("|");
+
+  useEffect(() => {
+    if (tab !== "todayWork") return;
+    setWorkLogWorkersEnabled(activeAdditionalWorkers.length > 0);
+    setWorkLogWorkerInputCount(Math.max(1, Math.min(10, activeAdditionalWorkers.length || 1)));
+  }, [activeWorkerKey, activeAdditionalWorkers.length, tab, workLogDate]);
+
   const homeStats = [
     ["今日の予定", `${todaySchedules.length}件`],
     ["今日の領収書", `${todayReceipts.length}件`],
@@ -394,7 +491,7 @@ export default function App() {
       id: `today-${schedule.id}`,
       title: "今日の現場",
       body: `${schedule.siteName || "現場未入力"}${schedule.startTime ? ` / 開始1時間前の目安 ${schedule.startTime}` : ""}`,
-      actions: ["今日の現場を見る", todaySiteAddress ? "地図" : "", "日報下書き"].filter(Boolean)
+      actions: ["現場情報", todaySiteAddress ? "地図" : "", "日報下書き"].filter(Boolean)
     })),
     ...tomorrowSchedules.map((schedule) => ({
       id: `tomorrow-${schedule.id}`,
@@ -798,9 +895,22 @@ export default function App() {
   async function saveWorkLogFromForm(form: HTMLFormElement) {
     const fd = new FormData(form);
     const date = String(fd.get("date") || today);
-    const siteId = String(fd.get("siteId") || "");
+    const siteId = String(fd.get("siteId") || activeWorkSite?.id || "");
     const site = sites.find((item) => item.id === siteId);
     const schedule = calendarSchedules.find((item) => item.date === date && (!siteId || item.siteId === siteId));
+    const hasAdditionalWorkers = fd.get("hasExtraWorkers") === "on";
+    const additionalWorkers = hasAdditionalWorkers
+      ? fd.getAll("workerName").map((name) => String(name).trim()).filter(Boolean).filter((name) => name !== "自分").slice(0, 10)
+      : [];
+    const details: WorkLogDetails = {
+      weather: String(fd.get("weather") || defaultWorkLogDetails.weather),
+      progressPercent: clampProgressPercent(fd.get("progressPercent")),
+      workContent: String(fd.get("workContent") || schedule?.workDescription || "").trim(),
+      equipment: String(fd.get("equipment") || "").trim(),
+      waste: String(fd.get("waste") || "").trim(),
+      tomorrowPlan: String(fd.get("tomorrowPlan") || "").trim(),
+      notes: String(fd.get("notes") || "").trim()
+    };
     const photoInput = form.elements.namedItem("photos") as HTMLInputElement | null;
     let newPhotos: string[] = [];
     try {
@@ -814,19 +924,18 @@ export default function App() {
       id: existing?.id ?? uid("work"),
       date,
       siteId,
-      siteName: site?.siteName || schedule?.siteName || String(fd.get("siteName") || ""),
-      workers: String(fd.get("workers") || schedule?.workers || ""),
-      memo: String(fd.get("memo") || schedule?.workDescription || ""),
+      siteName: site?.siteName || schedule?.siteName || String(fd.get("siteName") || activeWorkSiteName || ""),
+      workers: ["自分", ...Array.from(new Set(additionalWorkers))].join("、"),
+      memo: composeWorkLogMemo(details),
       photoUrls: [...(existing?.photoUrls ?? []), ...newPhotos].slice(0, 12),
-      receiptDone: fd.get("receiptDone") === "on",
-      photoDone: fd.get("photoDone") === "on",
+      receiptDone: existing?.receiptDone ?? receipts.some((receipt) => receipt.date === date),
+      photoDone: Boolean(existing?.photoDone || existing?.photoUrls.length || newPhotos.length),
       invoiceReady: ENABLE_BILLING ? fd.get("invoiceReady") === "on" : existing?.invoiceReady ?? false,
       createdAt: existing?.createdAt ?? new Date().toISOString()
     };
     setWorkLogs([workLog, ...workLogs.filter((log) => log.id !== workLog.id)]);
     await saveRemote((id) => saveWorkLogRemote(workLog, id));
     setMessage("日報を保存しました。おつかれさまです");
-    form.reset();
   }
 
   async function saveCalendarScheduleFromForm(form: HTMLFormElement) {
@@ -1094,7 +1203,7 @@ export default function App() {
               </span>
             </div>
             {hasSites ? (
-              <div className="mt-4 grid gap-3">
+              <div className="mt-3 grid gap-2">
                 <button
                   type="button"
                   onClick={() => { setWorkLogDate(today); setTab("todayWork"); }}
@@ -1102,21 +1211,42 @@ export default function App() {
                 >
                   日報を終わらせる
                 </button>
-                {!todayMainSchedule ? <p className="rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-800">今日の予定はまだ入っていません</p> : null}
-                {[
-                  ["進捗状況", todayProgressLabel],
-                  ["人数", todayPeopleLabel],
-                  ...(todayHomeMemo ? [["メモ内容", todayHomeMemo]] : []),
-                  ["現場名", mainSiteLabel],
-                  ["住所", todaySiteAddress || "住所未登録"],
-                  ["予定時間", todayMainSchedule?.startTime || todayMainSchedule?.endTime ? `${todayMainSchedule?.startTime || "-"}-${todayMainSchedule?.endTime || "-"}` : "未登録"],
-                  ["今日保存した領収書", `${todayReceipts.length}件`]
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-lg bg-skysoft p-3">
-                    <p className="text-xs font-bold text-slate-500">{label}</p>
-                    <p className="mt-1 break-words text-base font-black text-ink">{value}</p>
+                <div className="grid gap-1 rounded-lg bg-skysoft p-2">
+                  <div className="rounded-md bg-white px-2 py-1.5">
+                    <p className="text-[11px] font-bold text-slate-500">現場名</p>
+                    <p className="break-words text-sm font-black text-ink">{mainSiteLabel}</p>
                   </div>
-                ))}
+                  <div className="rounded-md bg-white px-2 py-1.5">
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-slate-500">現場住所</p>
+                        <p className="break-words text-sm font-black text-ink">{todaySiteAddress || "住所未登録"}</p>
+                      </div>
+                      <button type="button" onClick={copyTodayAddress} className="tap shrink-0 rounded-md border border-genba bg-white px-2 py-1 text-xs font-black text-genba">
+                        コピー
+                      </button>
+                    </div>
+                  </div>
+                  <div className="rounded-md bg-white px-2 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-bold text-slate-500">進捗状況</p>
+                      <p className="text-sm font-black text-genba">{todayProgressLabel}</p>
+                    </div>
+                    <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-genba" style={{ width: `${todayWorkProgressPercent}%` }} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    <div className="rounded-md bg-white px-2 py-1.5">
+                      <p className="text-[11px] font-bold text-slate-500">人数</p>
+                      <p className="break-words text-sm font-black text-ink">{todayPeopleLabel}</p>
+                    </div>
+                    <div className="rounded-md bg-white px-2 py-1.5">
+                      <p className="text-[11px] font-bold text-slate-500">今日の領収書</p>
+                      <p className="text-sm font-black text-ink">{todayReceipts.length}件</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="mt-4 rounded-lg border border-genba bg-skysoft p-4">
@@ -1141,13 +1271,10 @@ export default function App() {
 
           <div className="grid gap-2">
             {[
-              { label: "1. 今日の現場を見る", action: () => { setCalendarMonth(monthInput()); setSelectedCalendarDate(today); setCalendarAddFocus(!todayMainSchedule); setTab("calendar"); } },
-              { label: "2. 住所をコピー", action: copyTodayAddress },
-              { label: "3. 日報を確認する", action: () => { setWorkLogDate(today); setTab("todayWork"); } },
-              { label: "4. 領収書を保存", action: () => setTab("receipts") },
-              { label: "5. 写真メモを追加", action: () => { setWorkLogDate(today); setTab("todayWork"); } },
-              { label: "6. 明日の予定を見る", action: () => { setCalendarMonth(tomorrow.slice(0, 7)); setSelectedCalendarDate(tomorrow); setCalendarAddFocus(false); setTab("calendar"); } },
-              { label: "7. 会社へ共有する", action: shareTodaySummary }
+              { label: "1. 領収書を保存", action: () => setTab("receipts") },
+              { label: "2. 写真メモを追加", action: () => { setWorkLogDate(today); setTab("todayWork"); } },
+              { label: "3. 明日の予定を見る", action: () => { setCalendarMonth(tomorrow.slice(0, 7)); setSelectedCalendarDate(tomorrow); setCalendarAddFocus(false); setTab("calendar"); } },
+              { label: "4. 会社へ共有する", action: shareTodaySummary }
             ].map((item) => (
               <button key={item.label} type="button" onClick={item.action} className="tap min-h-14 rounded-lg bg-genba px-4 py-3 text-left text-base font-black text-white shadow-soft">
                 {item.label}
@@ -1192,56 +1319,103 @@ export default function App() {
           <Card className="bg-genba text-white">
             <p className="text-sm opacity-90">日報記入</p>
             <h2 className="mt-1 text-2xl font-black">{workLogDate}</h2>
-            <p className="mt-2 text-sm opacity-90">{activeWorkLog ? `片付け ${activeWorkProgress}/${activeWorkProgressTotal} まで完了` : activeWorkSchedule ? "カレンダー予定から日報を書けます" : "現場終わりにここだけ残せばOK"}</p>
+            <p className="mt-2 text-sm opacity-90">{activeWorkLog ? `進捗 ${activeWorkDetails.progressPercent}% まで記録済み` : activeWorkSchedule ? "カレンダー予定と現場管理から日報を書けます" : "現場管理の内容をもとに手入力できます"}</p>
           </Card>
 
           <Card>
-            <SectionTitle icon={<CheckCircle2 />} title="日報メモ" sub="作業員・メモ・写真をまとめます" />
-            <form key={workLogDate} className="grid gap-3" onSubmit={async (e) => {
+            <SectionTitle icon={<CheckCircle2 />} title="日報" sub="現場の進み具合と明日の段取りを残します" />
+            <form key={`${workLogDate}-${activeWorkLog?.id || activeWorkSchedule?.id || activeWorkSite?.id || "new"}-${activeWorkerKey}`} className="grid gap-3" onSubmit={async (e) => {
               e.preventDefault();
               await saveWorkLogFromForm(e.currentTarget);
             }}>
               <input type="hidden" name="date" value={activeWorkLog?.date || workLogDate} readOnly />
-              <input type="hidden" name="siteId" value={activeWorkLog?.siteId || activeWorkSchedule?.siteId || ""} readOnly />
-              <input type="hidden" name="workers" value={activeWorkLog?.workers || activeWorkSchedule?.workers || workerLabel} readOnly />
+              <input type="hidden" name="siteId" value={activeWorkLog?.siteId || activeWorkSchedule?.siteId || activeWorkSite?.id || ""} readOnly />
+              <input type="hidden" name="siteName" value={activeWorkSiteName} readOnly />
               <div className="grid gap-2 rounded-lg bg-skysoft p-3">
-                {[
-                  ["日付", activeWorkLog?.date || workLogDate],
-                  ["現場名", activeWorkLog?.siteName || activeWorkSchedule?.siteName || "現場未登録"],
-                  ["住所", activeWorkSite?.address || "住所未登録"],
-                  ["担当者", activeWorkLog?.workers || activeWorkSchedule?.workers || workerLabel],
-                  ["会社/所属", companyLabel],
-                  ["開始/終了予定", activeWorkSchedule?.startTime || activeWorkSchedule?.endTime ? `${activeWorkSchedule?.startTime || "-"}-${activeWorkSchedule?.endTime || "-"}` : "未登録"],
-                  ["作業開始", activeWorkTimes.workStartTime],
-                  ["作業終了", activeWorkTimes.workEndTime],
-                  ["予定メモ", activeWorkSchedule?.memo || "メモなし"],
-                  ["その日の領収書", `${receipts.filter((receipt) => receipt.date === workLogDate).length}件`],
-                  ["写真メモ", activeWorkLog?.photoUrls.length ? `写真 ${activeWorkLog.photoUrls.length}枚` : "未登録"]
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-lg bg-white p-3">
-                    <p className="text-xs font-bold text-slate-500">{label}</p>
-                    <p className="mt-1 break-words text-sm font-black text-ink">{value}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg bg-white p-3">
+                    <p className="text-xs font-bold text-slate-500">日付</p>
+                    <p className="mt-1 text-base font-black text-ink">{activeWorkLog?.date || workLogDate}</p>
                   </div>
-                ))}
+                  <label className="grid min-w-0 gap-1 rounded-lg bg-white p-3 text-xs font-bold text-slate-500">
+                    天候
+                    <select name="weather" defaultValue={activeWorkDetails.weather} className="tap min-h-10 min-w-0 w-full rounded-lg border border-line bg-white px-3 py-2 text-base font-black text-ink outline-none focus:border-genba focus:ring-4 focus:ring-skysoft">
+                      <option value="☀️">☀️ 晴れ</option>
+                      <option value="☁️">☁️ くもり</option>
+                      <option value="☔️">☔️ 雨</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="rounded-lg bg-white p-3">
+                  <p className="text-xs font-bold text-slate-500">現場名（邸名・物件名）</p>
+                  <p className="mt-1 break-words text-base font-black text-ink">{activeWorkSiteName}</p>
+                  <p className="mt-1 break-words text-xs text-slate-500">{activeWorkSite?.address || "住所未登録"}</p>
+                </div>
+                <div className="rounded-lg bg-white p-3">
+                  <p className="text-xs font-bold text-slate-500">予定から自動反映</p>
+                  <p className="mt-1 text-sm font-bold text-ink">作業開始 {activeWorkTimes.workStartTime} / 作業終了 {activeWorkTimes.workEndTime}</p>
+                  {activeWorkSchedule?.memo ? <p className="mt-1 break-words text-xs text-slate-600">{activeWorkSchedule.memo}</p> : null}
+                </div>
               </div>
-              <TextArea label="作業内容" name="memo" defaultValue={activeWorkLog?.memo || activeWorkSchedule?.workDescription || ""} />
+
+              <div className="grid gap-2 rounded-lg border border-line bg-white p-3">
+                <p className="text-sm font-black text-genba">作業責任者・作業員</p>
+                <div className="rounded-lg bg-skysoft p-3">
+                  <p className="text-xs font-bold text-slate-500">作業責任者</p>
+                  <p className="mt-1 text-base font-black text-ink">自分</p>
+                </div>
+                <label className="flex items-center gap-3 rounded-lg bg-skysoft p-3 text-sm font-bold text-ink">
+                  <input
+                    name="hasExtraWorkers"
+                    type="checkbox"
+                    checked={workLogWorkersEnabled}
+                    onChange={(e) => {
+                      setWorkLogWorkersEnabled(e.currentTarget.checked);
+                      if (e.currentTarget.checked) setWorkLogWorkerInputCount((count) => Math.max(1, count));
+                    }}
+                    className="h-5 w-5 accent-[#176B87]"
+                  />
+                  作業員を追加する
+                </label>
+                {workLogWorkersEnabled ? (
+                  <div className="grid gap-2">
+                    <datalist id="work-log-worker-options">
+                      {workerNameSuggestions.map((name) => <option key={name} value={name} />)}
+                    </datalist>
+                    {Array.from({ length: workLogWorkerInputCount }).map((_, index) => (
+                      <label key={index} className="grid min-w-0 gap-1 text-xs font-bold text-ink">
+                        作業員 {index + 1}
+                        <input
+                          name="workerName"
+                          list="work-log-worker-options"
+                          defaultValue={activeAdditionalWorkers[index] || ""}
+                          className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+                          placeholder="名前を入力"
+                        />
+                      </label>
+                    ))}
+                    <button
+                      type="button"
+                      disabled={workLogWorkerInputCount >= 10}
+                      onClick={() => setWorkLogWorkerInputCount((count) => Math.min(10, count + 1))}
+                      className="tap min-h-11 rounded-lg border border-genba bg-white px-3 py-2 text-sm font-bold text-genba disabled:border-line disabled:text-slate-400"
+                    >
+                      + 作業員を追加（10人まで）
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              <TextArea label="本日の作業内容" name="workContent" defaultValue={activeWorkDetails.workContent || activeWorkSchedule?.workDescription || ""} placeholder="例：下地調整、配線、器具付けなど" />
+              <Field label="進捗（全体の何%まで終わったか）" name="progressPercent" type="number" defaultValue={activeWorkDetails.progressPercent} />
+              <TextArea label="重機・車両の稼働状況" name="equipment" defaultValue={activeWorkDetails.equipment} placeholder="例：2t車 午前中のみ、ユニック使用なし" />
+              <TextArea label="産業廃棄物の搬出記録" name="waste" defaultValue={activeWorkDetails.waste} placeholder="例：木くず2袋、金属くず少量" />
+              <TextArea label="明日の作業予定・必要な段取り" name="tomorrowPlan" defaultValue={activeWorkDetails.tomorrowPlan} placeholder="例：材料搬入、職人2名、駐車場確認" />
+              <TextArea label="特記事項・連絡事項" name="notes" defaultValue={activeWorkDetails.notes} placeholder="例：施主確認待ち、近隣対応あり" />
               <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
                 現場写真
                 <input name="photos" type="file" accept="image/*" multiple className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base" />
               </label>
-              <div className="grid gap-2 rounded-lg border border-line bg-white p-3">
-                <p className="text-sm font-bold text-genba">今日の片付け</p>
-                {[
-                  ["receiptDone", "領収書を撮った", activeWorkLog?.receiptDone],
-                  ["photoDone", "現場写真を残した", activeWorkLog?.photoDone],
-                  ...(ENABLE_BILLING ? [["invoiceReady", "請求書に回せる", activeWorkLog?.invoiceReady]] : [])
-                ].map(([name, label, checked]) => (
-                  <label key={String(name)} className="flex items-center gap-3 rounded-lg bg-skysoft p-3 text-sm font-bold text-ink">
-                    <input name={String(name)} type="checkbox" defaultChecked={Boolean(checked)} className="h-5 w-5 accent-[#176B87]" />
-                    {label}
-                  </label>
-                ))}
-              </div>
               <SaveButton label="日報を保存" />
             </form>
           </Card>
@@ -1250,8 +1424,34 @@ export default function App() {
             <Card>
               <p className="text-sm font-bold text-genba">保存済み</p>
               <h3 className="mt-1 text-xl font-black">{activeWorkLog.siteName || "現場未選択"}</h3>
-              <p className="mt-1 text-sm text-slate-600">作業員：{activeWorkLog.workers || "未入力"}</p>
-              {activeWorkLog.memo ? <p className="mt-3 rounded-lg bg-skysoft p-3 text-sm leading-6 text-slate-700">{activeWorkLog.memo}</p> : null}
+              <p className="mt-1 text-sm text-slate-600">作業責任者・作業員：{activeWorkLog.workers || "自分"}</p>
+              <div className="mt-3 grid gap-2 rounded-lg bg-skysoft p-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg bg-white p-3">
+                    <p className="text-xs font-bold text-slate-500">天候</p>
+                    <p className="mt-1 text-base font-black text-ink">{activeWorkDetails.weather}</p>
+                  </div>
+                  <div className="rounded-lg bg-white p-3">
+                    <p className="text-xs font-bold text-slate-500">進捗</p>
+                    <p className="mt-1 text-base font-black text-genba">{activeWorkDetails.progressPercent}%</p>
+                    <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-genba" style={{ width: `${activeWorkDetails.progressPercent}%` }} />
+                    </div>
+                  </div>
+                </div>
+                {[
+                  ["本日の作業内容", activeWorkDetails.workContent],
+                  ["重機・車両の稼働状況", activeWorkDetails.equipment],
+                  ["産業廃棄物の搬出記録", activeWorkDetails.waste],
+                  ["明日の作業予定・必要な段取り", activeWorkDetails.tomorrowPlan],
+                  ["特記事項・連絡事項", activeWorkDetails.notes]
+                ].filter(([, value]) => value).map(([label, value]) => (
+                  <div key={label} className="rounded-lg bg-white p-3">
+                    <p className="text-xs font-bold text-slate-500">{label}</p>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{value}</p>
+                  </div>
+                ))}
+              </div>
               {activeWorkLog.photoUrls.length ? (
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   {activeWorkLog.photoUrls.slice(0, 6).map((url, index) => <img key={`${url}-${index}`} src={url} alt="" className="aspect-square rounded-lg object-cover" />)}
