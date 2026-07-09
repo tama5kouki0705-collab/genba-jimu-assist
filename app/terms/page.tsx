@@ -8,7 +8,7 @@ export default function TermsPage() {
       <section className="mt-8 grid gap-5 text-sm leading-7">
         <div>
           <h2 className="text-lg font-black">1. サービス内容</h2>
-          <p className="mt-2">本サービスは、現場責任者や担当者のために、担当現場の日報、カレンダー、領収書、請求書などの記録整理と会社共有を補助します。</p>
+          <p className="mt-2">本サービスは、現場責任者や担当者のために、担当現場の日報、カレンダー、領収書、写真メモなどの現場記録の補助と会社共有を支援します。</p>
         </div>
         <div>
           <h2 className="text-lg font-black">2. アカウント管理</h2>
