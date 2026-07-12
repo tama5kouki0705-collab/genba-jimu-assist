@@ -50,6 +50,7 @@ import { INVOICE_LINE_ITEM_CATEGORIES, INVOICE_LINE_ITEM_UNITS, MAX_INVOICE_LINE
 import { STORAGE_ERROR_EVENT, STORAGE_LIMIT_MESSAGE, accountKey, getLocalAccounts, hashPassword, normalizeEmail, saveLocalAccounts, setLocalStorageItem, useStoredState } from "@/lib/local-state";
 import { buildPrintableDocumentHtml } from "@/lib/pdf-documents";
 import { receiptStatusLabel } from "@/lib/receipt-domain";
+import { compactTradeDetails, formatTradeDetails, getTradeReportConfig, type TradeDetails, type TradeReportField } from "@/lib/trade-report-fields";
 import type { AdminUser, CalendarSchedule, Estimate, Invoice, InvoiceLineItem, Plan, Profile, Qualification, Receipt, Site, Vehicle, WorkLog } from "@/lib/types";
 
 type Tab =
@@ -88,6 +89,7 @@ const BRAND_NAME = "段取　命　君";
 const BRAND_TAGLINE = "職長から始める";
 const BRAND_CHARACTER_SRC = "/dandori-kun.jpg";
 const receiptPurposeOptions = ["材料", "工具・道具", "交通", "駐車場", "高速", "燃料", "消耗品", "外注", "その他"];
+const progressPercentOptions = Array.from({ length: 11 }, (_, index) => index * 10);
 // 請求書・見積書機能。復活手順：この値をtrueに戻すだけ。関連コードは lib/invoice-workflow.ts / lib/pdf-documents.ts / page.tsx の MoneySection。
 const ENABLE_BILLING = false;
 // Googleログイン。Supabase側のOAuth設定確認後、テスト配布で使う場合はtrueに戻す。
@@ -137,6 +139,17 @@ function clampProgressPercent(value: FormDataEntryValue | string | number | null
   const parsed = Number(String(value ?? "").replace("%", ""));
   if (!Number.isFinite(parsed)) return 0;
   return Math.max(0, Math.min(100, Math.round(parsed)));
+}
+
+function formatSavedTime(value: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+}
+
+function confirmDelete() {
+  return window.confirm("本当に削除しますか？元に戻せません");
 }
 
 function extractWorkerNames(workers: string) {
@@ -221,6 +234,124 @@ function SectionTitle({ icon, title, sub }: { icon: React.ReactNode; title: stri
   );
 }
 
+function TradeReportFields({
+  title,
+  note,
+  fields,
+  details,
+  onChange
+}: {
+  title: string;
+  note?: string;
+  fields: TradeReportField[];
+  details: TradeDetails;
+  onChange: (fieldId: string, value: string | string[] | boolean | number | null) => void;
+}) {
+  const buttonClass = (selected: boolean) => `tap min-h-11 rounded-lg border px-3 py-2 text-sm font-black ${selected ? "border-genba bg-genba text-white" : "border-line bg-skysoft text-genba"}`;
+
+  return (
+    <details open className="rounded-lg border border-genba/30 bg-white p-3">
+      <summary className="cursor-pointer text-sm font-black text-genba">{title}</summary>
+      <div className="mt-3 grid gap-3">
+        {fields.map((field) => {
+          const value = details[field.id];
+          if (field.type === "check") {
+            const selectedValues = Array.isArray(value) ? value : [];
+            return (
+              <div key={field.id} className="grid gap-2">
+                <p className="text-sm font-bold text-ink">{field.label}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(field.options ?? []).map((option) => {
+                    const selected = selectedValues.includes(option);
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => onChange(field.id, selected ? selectedValues.filter((item) => item !== option) : [...selectedValues, option])}
+                        className={buttonClass(selected)}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          }
+          if (field.type === "select") {
+            return (
+              <div key={field.id} className="grid gap-2">
+                <p className="text-sm font-bold text-ink">{field.label}</p>
+                <div className="grid grid-cols-1 gap-2">
+                  {(field.options ?? []).map((option) => {
+                    const selected = value === option;
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => onChange(field.id, selected ? "" : option)}
+                        className={buttonClass(selected)}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          }
+          if (field.type === "number") {
+            return (
+              <label key={field.id} className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
+                {field.label}
+                <input
+                  type="number"
+                  value={typeof value === "number" || typeof value === "string" ? value : ""}
+                  onChange={(event) => onChange(field.id, event.currentTarget.value)}
+                  placeholder={field.placeholder}
+                  className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+                />
+              </label>
+            );
+          }
+          if (field.type === "toggle-text") {
+            const enabled = value === true || (typeof value === "string" && value.length > 0);
+            return (
+              <div key={field.id} className="grid gap-2">
+                <button type="button" aria-pressed={enabled} onClick={() => onChange(field.id, enabled ? null : true)} className={buttonClass(enabled)}>
+                  {field.label}
+                </button>
+                {enabled ? (
+                  <input
+                    value={typeof value === "string" ? value : ""}
+                    onChange={(event) => onChange(field.id, event.currentTarget.value || true)}
+                    placeholder={field.placeholder}
+                    className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+                  />
+                ) : null}
+              </div>
+            );
+          }
+          return (
+            <label key={field.id} className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
+              {field.label}
+              <input
+                value={typeof value === "string" ? value : ""}
+                onChange={(event) => onChange(field.id, event.currentTarget.value)}
+                placeholder={field.placeholder}
+                className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+              />
+            </label>
+          );
+        })}
+        {note ? <p className="rounded-lg bg-skysoft p-3 text-xs font-bold leading-5 text-genba">{note}</p> : null}
+      </div>
+    </details>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("home");
   const [email, setEmail] = useState("");
@@ -244,6 +375,9 @@ export default function App() {
   const [authReady, setAuthReady] = useState(!hasSupabase);
   const [hasRemoteSession, setHasRemoteSession] = useState(!hasSupabase);
   const [isAuthBusy, setIsAuthBusy] = useState(false);
+  const [isResendBusy, setIsResendBusy] = useState(false);
+  const [signupConfirmationEmail, setSignupConfirmationEmail] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [receiptFilter, setReceiptFilter] = useState<"all" | "unprocessed" | "processed">("all");
   const [editingReceiptId, setEditingReceiptId] = useState("");
@@ -256,6 +390,9 @@ export default function App() {
   const [workLogDate, setWorkLogDate] = useState(today);
   const [workLogWorkersEnabled, setWorkLogWorkersEnabled] = useState(false);
   const [workLogWorkerInputCount, setWorkLogWorkerInputCount] = useState(1);
+  const [workLogProgressInput, setWorkLogProgressInput] = useState("0");
+  const [isWorkLogDirty, setIsWorkLogDirty] = useState(false);
+  const [workLogTradeDetails, setWorkLogTradeDetails] = useState<TradeDetails>({});
 
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
@@ -388,6 +525,7 @@ export default function App() {
   const activeWorkLog = workLogs.find((log) => log.date === workLogDate);
   const activeWorkProgressPercent = activeWorkLog ? clampProgressPercent(activeWorkLog.progressPercent) : 0;
   const activeWorkWeather = activeWorkLog?.weather || "☀️";
+  const activeWorkSavedTime = formatSavedTime(activeWorkLog?.updatedAt || activeWorkLog?.createdAt || "");
   const activeWorkSchedule = calendarSchedules.find((item) => item.date === workLogDate && (!activeWorkLog?.siteId || item.siteId === activeWorkLog.siteId));
   const activeWorkSite = (activeWorkLog?.siteId ? sites.find((site) => site.id === activeWorkLog.siteId) : undefined)
     || (activeWorkSchedule?.siteId ? sites.find((site) => site.id === activeWorkSchedule.siteId) : undefined)
@@ -409,6 +547,16 @@ export default function App() {
     : todayWorkLog?.workers ? formatWorkerSummary(todayWorkLog.workers) : "自分（1人）";
   const todayHomeMemo = todayMainSchedule?.memo || currentSite?.memo || "";
   const activeWorkSiteName = activeWorkLog?.siteName || activeWorkSchedule?.siteName || activeWorkSite?.siteName || "現場未登録";
+  const activeWorkSiteId = activeWorkLog?.siteId || activeWorkSchedule?.siteId || activeWorkSite?.id || "";
+  const activeTradeConfig = getTradeReportConfig(profile.trade || "");
+  const shouldShowCommonMachineryWaste = activeTradeConfig?.trade !== "解体" || Boolean(activeWorkLog?.machinery || activeWorkLog?.wasteRecord);
+  const activeWorkTradeRows = formatTradeDetails(activeTradeConfig, activeWorkLog?.tradeDetails ?? null);
+  const todayWorkTradeRows = formatTradeDetails(activeTradeConfig, todayWorkLog?.tradeDetails ?? null);
+  const previousWorkProgressLog = activeWorkSiteId ? workLogs
+    .filter((log) => log.siteId === activeWorkSiteId && log.date < workLogDate && log.id !== activeWorkLog?.id)
+    .sort((a, b) => b.date.localeCompare(a.date))[0] : undefined;
+  const previousWorkProgressPercent = previousWorkProgressLog ? clampProgressPercent(previousWorkProgressLog.progressPercent) : null;
+  const workLogInitialProgressPercent = activeWorkLog ? activeWorkProgressPercent : previousWorkProgressPercent ?? 0;
   const activeAdditionalWorkers = extractWorkerNames(activeWorkLog?.workers || activeWorkSchedule?.workers || "");
   const workerNameSuggestions = Array.from(new Set([
     ...workLogs.flatMap((log) => extractWorkerNames(log.workers)),
@@ -422,12 +570,50 @@ export default function App() {
     setWorkLogWorkerInputCount(Math.max(1, Math.min(10, activeAdditionalWorkers.length || 1)));
   }, [activeWorkerKey, activeAdditionalWorkers.length, tab, workLogDate]);
 
+  useEffect(() => {
+    if (tab !== "todayWork") return;
+    setWorkLogProgressInput(String(workLogInitialProgressPercent));
+    setWorkLogTradeDetails(activeWorkLog?.tradeDetails ?? {});
+    setIsWorkLogDirty(false);
+  }, [activeTradeConfig?.trade, activeWorkLog?.id, activeWorkLog?.tradeDetails, tab, workLogDate, workLogInitialProgressPercent]);
+
+  useEffect(() => {
+    if (!isWorkLogDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isWorkLogDirty]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setInterval(() => {
+      setResendCooldown((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
+
   const homeStats = [
     ["今日の予定", `${todaySchedules.length}件`],
     ["今日の領収書", `${todayReceipts.length}件`],
     ["未処理の領収書", `${unprocessedReceipts.length}枚`],
     ...(ENABLE_BILLING ? [["今月の売上", yen.format(monthSales)]] : [])
   ];
+
+  function requestTabChange(nextTab: Tab) {
+    if (tab === "todayWork" && nextTab !== "todayWork" && isWorkLogDirty && !window.confirm("書きかけの日報があります。保存せずに移動しますか？")) {
+      return;
+    }
+    setTab(nextTab);
+  }
+
+  function updateWorkLogTradeDetail(fieldId: string, value: string | string[] | boolean | number | null) {
+    setWorkLogTradeDetails((details) => ({ ...details, [fieldId]: value }));
+    setIsWorkLogDirty(true);
+  }
+
   // TODO: 将来 Supabase pg_cron + Edge Function + Web Push で7:00/開始1時間前/15:00/17:00を実配信する。今回はアプリ内通知だけ。
   const notificationItems = [
     ...todaySchedules.map((schedule) => ({
@@ -503,11 +689,14 @@ export default function App() {
       if (result.data.session?.user) {
         setUserId(result.data.session.user.id);
         setUserEmail(result.data.session.user.email ?? normalizedEmail);
+        setSignupConfirmationEmail("");
         setTab("home");
         setIsAuthBusy(false);
         return;
       }
       if (mode === "signup" && result.data.user) {
+        setSignupConfirmationEmail(normalizedEmail);
+        setResendCooldown(60);
         setMessage("確認メールを送りました。\n①メールを開く\n②メール内の確認ボタンを押す\n③この画面に戻ってログイン\nメールが見つからないときは迷惑メールフォルダも確認してください");
         setIsAuthBusy(false);
         return;
@@ -562,6 +751,30 @@ export default function App() {
     }
     setTab("home");
     setIsAuthBusy(false);
+  }
+
+  async function resendConfirmationEmail() {
+    const targetEmail = signupConfirmationEmail || normalizeEmail(email);
+    if (!targetEmail) {
+      setMessage("先にメールを入れてください");
+      return;
+    }
+    if (!supabase) {
+      setMessage("確認メールの再送は本番DB接続後に使えます");
+      return;
+    }
+    if (resendCooldown > 0) return;
+    setIsResendBusy(true);
+    const result = await supabase.auth.resend({ type: "signup", email: targetEmail });
+    if (result.error) {
+      setMessage(authErrorMessage(result.error.message));
+      setIsResendBusy(false);
+      return;
+    }
+    setSignupConfirmationEmail(targetEmail);
+    setResendCooldown(60);
+    setMessage("確認メールを再送しました。迷惑メールフォルダも確認してください");
+    setIsResendBusy(false);
   }
 
   async function sendPasswordReset() {
@@ -715,6 +928,7 @@ export default function App() {
       `人数: ${todayPeopleLabel}`,
       `メモ: ${todayHomeMemo || "未入力"}`,
       `日報: ${todayWorkDraft}`,
+      ...todayWorkTradeRows.map(([label, value]) => `${label}: ${value}`),
       `領収書: ${todayReceipts.length}件`,
       `写真メモ: ${todayPhotoMemo}`
     ];
@@ -859,6 +1073,7 @@ export default function App() {
       return;
     }
     const existing = workLogs.find((log) => log.date === date);
+    const updatedAt = new Date().toISOString();
     const workLog: WorkLog = {
       id: existing?.id ?? uid("work"),
       date,
@@ -877,10 +1092,13 @@ export default function App() {
       receiptDone: existing?.receiptDone ?? receipts.some((receipt) => receipt.date === date),
       photoDone: Boolean(existing?.photoDone || existing?.photoUrls.length || newPhotos.length),
       invoiceReady: ENABLE_BILLING ? fd.get("invoiceReady") === "on" : existing?.invoiceReady ?? false,
-      createdAt: existing?.createdAt ?? new Date().toISOString()
+      createdAt: existing?.createdAt ?? updatedAt,
+      updatedAt,
+      tradeDetails: activeTradeConfig ? compactTradeDetails(activeTradeConfig, workLogTradeDetails) : existing?.tradeDetails ?? null
     };
     setWorkLogs([workLog, ...workLogs.filter((log) => log.id !== workLog.id)]);
     await saveRemote((id) => saveWorkLogRemote(workLog, id));
+    setIsWorkLogDirty(false);
     setMessage("日報を保存しました。おつかれさまです");
   }
 
@@ -917,6 +1135,7 @@ export default function App() {
   }
 
   async function deleteCalendarSchedule(scheduleId: string) {
+    if (!confirmDelete()) return;
     setCalendarSchedules(calendarSchedules.filter((item) => item.id !== scheduleId));
     await saveRemote(() => deleteCalendarScheduleRemote(scheduleId));
     setMessage("予定を削除しました");
@@ -941,6 +1160,7 @@ export default function App() {
   }
 
   async function deleteReceipt(receiptId: string) {
+    if (!confirmDelete()) return;
     setReceipts(receipts.filter((item) => item.id !== receiptId));
     if (editingReceiptId === receiptId) resetReceiptForm();
     await saveRemote(() => deleteReceiptRemote(receiptId));
@@ -1049,6 +1269,15 @@ export default function App() {
             登録すると <a className="font-bold text-genba underline" href="/terms">利用規約</a> と <a className="font-bold text-genba underline" href="/privacy">プライバシーポリシー</a> に同意したことになります。
           </p>
           {message ? <p className="mt-3 whitespace-pre-line rounded-lg bg-red-50 p-3 text-sm text-red-700">{message}</p> : null}
+          {signupConfirmationEmail ? (
+            <button
+              disabled={isResendBusy || resendCooldown > 0}
+              onClick={resendConfirmationEmail}
+              className="tap mt-3 w-full rounded-lg border border-genba bg-white px-4 py-3 text-sm font-bold text-genba disabled:border-line disabled:text-slate-400"
+            >
+              {isResendBusy ? "再送中..." : resendCooldown > 0 ? `確認メールを再送する（${resendCooldown}秒後）` : "確認メールを再送する"}
+            </button>
+          ) : null}
         </Card>
       </main>
     );
@@ -1130,7 +1359,7 @@ export default function App() {
             <h1 className="text-2xl font-black">{BRAND_NAME}</h1>
             <p className="mt-1 text-xs text-slate-500">{syncStatus}</p>
           </div>
-          <button onClick={() => setTab("settings")} className="grid h-12 w-12 place-items-center rounded-lg bg-white text-genba shadow-soft" aria-label="メニュー">
+          <button onClick={() => requestTabChange("settings")} className="grid h-12 w-12 place-items-center rounded-lg bg-white text-genba shadow-soft" aria-label="メニュー">
             <Menu />
           </button>
         </div>
@@ -1153,7 +1382,7 @@ export default function App() {
               <div className="mt-3 grid gap-2">
                 <button
                   type="button"
-                  onClick={() => { setWorkLogDate(today); setTab("todayWork"); }}
+                  onClick={() => { setWorkLogDate(today); requestTabChange("todayWork"); }}
                   className="tap min-h-14 w-full min-w-0 whitespace-normal rounded-lg bg-genba px-3 py-3 text-left text-lg font-black leading-tight text-white shadow-soft"
                 >
                   日報を終わらせる
@@ -1207,7 +1436,7 @@ export default function App() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setTab("sites")}
+                  onClick={() => requestTabChange("sites")}
                   className="tap mt-4 min-h-14 w-full animate-pulse rounded-lg border-2 border-genba bg-white px-4 py-3 text-left text-base font-black text-genba shadow-soft"
                 >
                   現場を登録しましょう
@@ -1218,9 +1447,9 @@ export default function App() {
 
           <div className="grid gap-2">
             {[
-              { label: "1. 領収書を保存", action: () => setTab("receipts") },
-              { label: "2. 写真メモを追加", action: () => { setWorkLogDate(today); setTab("todayWork"); } },
-              { label: "3. 明日の予定を見る", action: () => { setCalendarMonth(tomorrow.slice(0, 7)); setSelectedCalendarDate(tomorrow); setCalendarAddFocus(false); setTab("calendar"); } },
+              { label: "1. 領収書を保存", action: () => requestTabChange("receipts") },
+              { label: "2. 写真メモを追加", action: () => { setWorkLogDate(today); requestTabChange("todayWork"); } },
+              { label: "3. 明日の予定を見る", action: () => { setCalendarMonth(tomorrow.slice(0, 7)); setSelectedCalendarDate(tomorrow); setCalendarAddFocus(false); requestTabChange("calendar"); } },
               { label: "4. 会社へ共有する", action: shareTodaySummary }
             ].map((item) => (
               <button key={item.label} type="button" onClick={item.action} className="tap min-h-14 w-full min-w-0 whitespace-normal rounded-lg bg-genba px-4 py-3 text-left text-base font-black text-white shadow-soft">
@@ -1271,10 +1500,11 @@ export default function App() {
 
           <Card>
             <SectionTitle icon={<CheckCircle2 />} title="日報" sub="現場の進み具合と明日の段取りを残します" />
+            {activeWorkSavedTime ? <p className="mb-3 rounded-lg bg-skysoft p-3 text-sm font-bold text-genba">保存済み・最終更新 {activeWorkSavedTime}</p> : null}
             <form key={`${workLogDate}-${activeWorkLog?.id || activeWorkSchedule?.id || activeWorkSite?.id || "new"}-${activeWorkerKey}`} className="grid gap-3" onSubmit={async (e) => {
               e.preventDefault();
               await saveWorkLogFromForm(e.currentTarget);
-            }}>
+            }} onChange={() => setIsWorkLogDirty(true)}>
               <input type="hidden" name="date" value={activeWorkLog?.date || workLogDate} readOnly />
               <input type="hidden" name="siteId" value={activeWorkLog?.siteId || activeWorkSchedule?.siteId || activeWorkSite?.id || ""} readOnly />
               <input type="hidden" name="siteName" value={activeWorkSiteName} readOnly />
@@ -1354,9 +1584,64 @@ export default function App() {
               </div>
 
               <TextArea label="本日の作業内容" name="workContent" defaultValue={activeWorkLog?.memo || activeWorkSchedule?.workDescription || ""} placeholder="例：下地調整、配線、器具付けなど" />
-              <Field label="進捗（全体の何%まで終わったか）" name="progressPercent" type="number" defaultValue={activeWorkProgressPercent} />
-              <TextArea label="重機・車両の稼働状況" name="machinery" defaultValue={activeWorkLog?.machinery || ""} placeholder="例：2t車 午前中のみ、ユニック使用なし" />
-              <TextArea label="産業廃棄物の搬出記録" name="wasteRecord" defaultValue={activeWorkLog?.wasteRecord || ""} placeholder="例：木くず2袋、金属くず少量" />
+              <div className="grid gap-2 rounded-lg border border-line bg-white p-3">
+                <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
+                  進捗（任意・ざっくりでOK）
+                  <input
+                    name="progressPercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={workLogProgressInput}
+                    onChange={(e) => setWorkLogProgressInput(e.currentTarget.value)}
+                    className="tap min-h-12 min-w-0 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none focus:border-genba focus:ring-4 focus:ring-skysoft"
+                    placeholder="0〜100"
+                  />
+                </label>
+                {previousWorkProgressPercent !== null && !activeWorkLog ? <p className="text-xs font-bold text-slate-500">前回 {previousWorkProgressPercent}%</p> : null}
+                <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                  {progressPercentOptions.map((percent) => {
+                    const selected = workLogProgressInput !== "" && clampProgressPercent(workLogProgressInput) === percent;
+                    return (
+                      <button
+                        key={percent}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => {
+                          setWorkLogProgressInput(String(percent));
+                          setIsWorkLogDirty(true);
+                        }}
+                        className={`tap min-h-10 rounded-lg border px-2 py-2 text-sm font-black ${selected ? "border-genba bg-genba text-white" : "border-line bg-skysoft text-genba"}`}
+                      >
+                        {percent}%
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {shouldShowCommonMachineryWaste ? (
+                <details open={Boolean(activeWorkLog?.machinery || activeWorkLog?.wasteRecord)} className="rounded-lg border border-line bg-white p-3">
+                  <summary className="cursor-pointer text-sm font-black text-genba">重機・産廃の記録（使う人だけ開く）</summary>
+                  <div className="mt-3 grid gap-3">
+                    <TextArea label="重機・車両の稼働状況" name="machinery" defaultValue={activeWorkLog?.machinery || ""} placeholder="例：2t車 午前中のみ、ユニック使用なし" />
+                    <TextArea label="産業廃棄物の搬出記録" name="wasteRecord" defaultValue={activeWorkLog?.wasteRecord || ""} placeholder="例：木くず2袋、金属くず少量" />
+                  </div>
+                </details>
+              ) : (
+                <>
+                  <input type="hidden" name="machinery" value={activeWorkLog?.machinery || ""} readOnly />
+                  <input type="hidden" name="wasteRecord" value={activeWorkLog?.wasteRecord || ""} readOnly />
+                </>
+              )}
+              {activeTradeConfig ? (
+                <TradeReportFields
+                  title={activeTradeConfig.title}
+                  note={activeTradeConfig.note}
+                  fields={activeTradeConfig.fields}
+                  details={workLogTradeDetails}
+                  onChange={updateWorkLogTradeDetail}
+                />
+              ) : null}
               <TextArea label="明日の作業予定・必要な段取り" name="tomorrowPlan" defaultValue={activeWorkLog?.tomorrowPlan || ""} placeholder="例：材料搬入、職人2名、駐車場確認" />
               <TextArea label="特記事項・連絡事項" name="notes" defaultValue={activeWorkLog?.notes || ""} placeholder="例：施主確認待ち、近隣対応あり" />
               <label className="grid min-w-0 gap-1 text-sm font-semibold text-ink">
@@ -1390,6 +1675,7 @@ export default function App() {
                   ["本日の作業内容", activeWorkLog.memo],
                   ["重機・車両の稼働状況", activeWorkLog.machinery || ""],
                   ["産業廃棄物の搬出記録", activeWorkLog.wasteRecord || ""],
+                  ...activeWorkTradeRows,
                   ["明日の作業予定・必要な段取り", activeWorkLog.tomorrowPlan || ""],
                   ["特記事項・連絡事項", activeWorkLog.notes || ""]
                 ].filter(([, value]) => value).map(([label, value]) => (
@@ -1405,7 +1691,7 @@ export default function App() {
                 </div>
               ) : null}
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <button onClick={() => setTab("receipts")} className="tap rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">領収書を撮る</button>
+                <button onClick={() => requestTabChange("receipts")} className="tap rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">領収書を撮る</button>
                 {ENABLE_BILLING ? <button onClick={() => createInvoiceFromWorkLog(activeWorkLog)} className="tap rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">請求書に回す</button> : null}
               </div>
             </Card>
@@ -1482,7 +1768,7 @@ export default function App() {
                       <p className="shrink-0 rounded-lg bg-white px-3 py-2 text-sm font-black text-genba">{yen.format((schedule.laborCount || 1) * (schedule.dailyRate || 0))}</p>
                     </div>
                     <div className={`mt-3 grid grid-cols-1 gap-2 ${ENABLE_BILLING ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
-                      <button type="button" onClick={() => { setWorkLogDate(schedule.date); setTab("todayWork"); }} className="tap min-h-12 rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">日報を書く</button>
+                      <button type="button" onClick={() => { setWorkLogDate(schedule.date); requestTabChange("todayWork"); }} className="tap min-h-12 rounded-lg border border-genba bg-white px-3 py-3 text-sm font-bold text-genba">日報を書く</button>
                       {ENABLE_BILLING ? <button type="button" onClick={() => createInvoiceFromSchedule(schedule)} className="tap min-h-12 rounded-lg bg-genba px-3 py-3 text-sm font-bold text-white">{schedule.invoiceId ? "請求書を再作成" : "請求書に回す"}</button> : null}
                       <button type="button" onClick={() => deleteCalendarSchedule(schedule.id)} className="tap min-h-12 rounded-lg border border-red-200 bg-white px-3 py-3 text-sm font-bold text-red-700">削除</button>
                     </div>
@@ -1619,13 +1905,23 @@ export default function App() {
                 </div>
               </div>
               <div className="mt-4 grid gap-2">
-                {editingSiteWorkLogs.slice(0, 5).map((log) => (
-                  <div key={log.id} className="rounded-lg border border-line bg-white p-3">
-                    <p className="text-xs font-bold text-genba">{log.date}</p>
-                    <p className="mt-1 break-words text-sm font-bold text-ink">{log.memo || "作業内容未入力"}</p>
-                    <p className="mt-1 text-xs text-slate-600">写真 {log.photoUrls.length}枚</p>
-                  </div>
-                ))}
+                {editingSiteWorkLogs.slice(0, 5).map((log) => {
+                  const tradeRows = formatTradeDetails(activeTradeConfig, log.tradeDetails);
+                  return (
+                    <div key={log.id} className="rounded-lg border border-line bg-white p-3">
+                      <p className="text-xs font-bold text-genba">{log.date}</p>
+                      <p className="mt-1 break-words text-sm font-bold text-ink">{log.memo || "作業内容未入力"}</p>
+                      {tradeRows.length ? (
+                        <div className="mt-2 grid gap-1 rounded-lg bg-skysoft p-2">
+                          {tradeRows.map(([label, value]) => (
+                            <p key={label} className="break-words text-xs leading-5 text-slate-700"><span className="font-bold text-genba">{label}：</span>{value}</p>
+                          ))}
+                        </div>
+                      ) : null}
+                      <p className="mt-1 text-xs text-slate-600">写真 {log.photoUrls.length}枚</p>
+                    </div>
+                  );
+                })}
                 {editingSiteWorkLogs.length === 0 ? <p className="rounded-lg bg-skysoft p-3 text-sm text-slate-600">この現場の日報はまだありません</p> : null}
               </div>
               {editingSitePhotos.length ? (
@@ -1943,7 +2239,7 @@ export default function App() {
       {tab === "settings" && (
         <Card>
           <SectionTitle icon={<Settings />} title="設定" sub={userEmail} />
-          <button onClick={() => setTab("profile")} className="tap mb-3 w-full rounded-lg bg-genba font-bold text-white">プロフィールを編集</button>
+          <button onClick={() => requestTabChange("profile")} className="tap mb-3 w-full rounded-lg bg-genba font-bold text-white">プロフィールを編集</button>
           <div className="mb-3 grid grid-cols-2 gap-2">
             {[
               ["sites", "現場"],
@@ -1953,7 +2249,7 @@ export default function App() {
               ["documents", "書類一覧"],
               ...(isAdminUser ? [["admin", "管理"]] : [])
             ].map(([next, label]) => (
-              <button key={next} onClick={() => setTab(next as Tab)} className="tap rounded-lg border border-line bg-white px-3 py-3 text-sm font-bold text-genba">{label}</button>
+              <button key={next} onClick={() => requestTabChange(next as Tab)} className="tap rounded-lg border border-line bg-white px-3 py-3 text-sm font-bold text-genba">{label}</button>
             ))}
           </div>
           <button onClick={() => { setUserEmail(""); setUserId(""); setHasRemoteSession(false); supabase?.auth.signOut(); }} className="tap w-full rounded-lg border border-line bg-white font-bold"><LogOut className="mr-2 inline" size={18} />ログアウト</button>
@@ -1965,7 +2261,7 @@ export default function App() {
       <nav className="fixed bottom-0 left-0 right-0 border-t border-line bg-white">
         <div className="mx-auto grid max-w-md grid-cols-5 gap-1 px-2 py-2">
           {nav.slice(0, 5).map(([id, label, icon]) => (
-            <button key={id} onClick={() => setTab(id)} className={`tap rounded-lg text-xs font-bold ${tab === id ? "bg-skysoft text-genba" : "text-slate-500"}`}>
+            <button key={id} onClick={() => requestTabChange(id)} className={`tap rounded-lg text-xs font-bold ${tab === id ? "bg-skysoft text-genba" : "text-slate-500"}`}>
               <span className="mx-auto mb-1 block w-fit">{icon}</span>{label}
             </button>
           ))}
@@ -2128,6 +2424,7 @@ function MoneySection({
 
   function removeInvoiceDraftLineItem(lineId: string, index: number) {
     if (index < MIN_INVOICE_LINE_ITEMS) return;
+    if (!confirmDelete()) return;
     setInvoiceDraftLineItems((lineItems) => lineItems.filter((lineItem) => lineItem.id !== lineId));
   }
 
@@ -2150,6 +2447,7 @@ function MoneySection({
   }
 
   async function deleteMoneyItem(item: Invoice | Estimate) {
+    if (!confirmDelete()) return;
     setItems(items.filter((nextItem: any) => nextItem.id !== item.id));
     await saveRemote(() => isInvoice ? deleteInvoiceRemote(item.id) : deleteEstimateRemote(item.id));
   }

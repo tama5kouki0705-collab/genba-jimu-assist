@@ -161,7 +161,9 @@ const workLogToDb = (workLog: WorkLog, userId: string) => ({
   receipt_done: workLog.receiptDone,
   photo_done: workLog.photoDone,
   invoice_ready: workLog.invoiceReady,
-  created_at: workLog.createdAt || new Date().toISOString()
+  created_at: workLog.createdAt || new Date().toISOString(),
+  updated_at: workLog.updatedAt || new Date().toISOString(),
+  trade_details: workLog.tradeDetails && Object.keys(workLog.tradeDetails).length > 0 ? workLog.tradeDetails : null
 });
 
 const workLogFromDb = (row: any): WorkLog => ({
@@ -182,7 +184,9 @@ const workLogFromDb = (row: any): WorkLog => ({
   receiptDone: Boolean(row.receipt_done),
   photoDone: Boolean(row.photo_done),
   invoiceReady: Boolean(row.invoice_ready),
-  createdAt: row.created_at ?? ""
+  createdAt: row.created_at ?? "",
+  updatedAt: row.updated_at ?? row.created_at ?? "",
+  tradeDetails: row.trade_details && typeof row.trade_details === "object" ? row.trade_details : null
 });
 
 const calendarScheduleToDb = (schedule: CalendarSchedule, userId: string) => ({
